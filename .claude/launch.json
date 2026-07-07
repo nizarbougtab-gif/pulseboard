@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pulseboard-dashboard",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\salig\\OneDrive\\Bureau\\medboard\\serve.ps1"],
+      "port": 5500
+    },
+    {
+      "name": "pulseboard-app",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\salig\\OneDrive\\Bureau\\medboard\\start-app.ps1"],
+      "port": 3000
+    }
+  ]
+}

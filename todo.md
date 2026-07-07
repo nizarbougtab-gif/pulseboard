@@ -1,0 +1,24 @@
+# MedBoard Sénégal - TODO
+
+- [x] Page d'accueil publique (landing page) avec présentation, établissements partenaires, profils cibles
+- [x] Système de design élégant (typographie Inter, couleurs médicales vertes, interface épurée)
+- [x] Authentification avec gestion des rôles (Externe, Interne, Résident, Médecin)
+- [x] Association utilisateur à un établissement et un service médical
+- [x] Tableau de bord principal (liste services, alertes actives, statistiques clés)
+- [x] Gestion des services médicaux (création, configuration lits, hôpital, spécialité)
+- [x] Gestion des patients (admission, lit, statut Stable/Modéré/Critique, filtres, badges J+X)
+- [x] Système d'alertes (DPS manquante, sans lit, tâches en retard)
+- [x] Génération de relève automatique (Critiques → Modérés → Stables, copie WhatsApp)
+- [x] Messagerie d'équipe par service
+- [x] Fiche patient détaillée (infos cliniques, allergies, antécédents, tâches, historique)
+- [x] Journal d'activité (timeline) par service
+- [x] Notifications/alertes automatiques (patient critique, alertes non résolues)
+- [x] Afficher alertes actives et statistiques clés sur le dashboard principal
+- [x] Afficher historique des actions dans la fiche patient
+- [x] Refondre l'interface avec sidebar latérale (Menu Principal: Services, Journal, Profil)
+- [x] Ajouter onglets dans la vue service : Lits, Garde, Consult., Relève
+- [x] Implémenter la gestion des consultations (ajouter une consultation, liste, statut Vu/En attente)
+- [x] Enrichir la fiche patient avec onglets : Suivi, Tâches, Vitaux, Obs, Fichiers
+- [x] Ajouter les notes DAR (Données-Actions-Résultats) et SOAP dans l'onglet Suivi
+- [x] Afficher badge J+X, statut lit/box, motif, DPS, tâches en cours dans la fiche patient
+- [x] Appliquer le style visuel du HTML fourni (couleurs orange/rouge pour alertes, vert pour validé)

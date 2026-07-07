@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PulseBoard — Prévisualisation</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #00853F;
+    --green-dark: #005f2d;
+    --green-light: rgba(0,133,63,0.08);
+    --red: #D92B35;
+    --amber: #c87a00;
+    --amber-light: rgba(200,122,0,0.08);
+    --blue: #1a56a0;
+  }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #fff; color: #1a1a1a; line-height: 1.5; }
+  a { text-decoration: none; }
+
+  /* NAV */
+  nav { position: sticky; top: 0; background: rgba(255,255,255,0.92); backdrop-filter: blur(16px); border-bottom: 1px solid #eee; z-index: 50; }
+  .nav-inner { max-width: 1100px; margin: auto; padding: 0 1.5rem; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo svg { width: 32px; height: 32px; }
+  .logo-name { font-weight: 700; font-size: 1.1rem; }
+  .logo-badge { font-size: 11px; color: #888; background: #f2f2f2; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+  .nav-links { display: flex; gap: 2rem; font-size: 14px; color: #666; }
+  .nav-links a:hover { color: #000; }
+  .nav-cta { background: var(--green); color: white; border: none; padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .nav-cta:hover { background: var(--green-dark); }
+  .btn-ghost { background: none; border: none; padding: 8px 14px; font-size: 14px; color: #555; cursor: pointer; border-radius: 8px; }
+  .btn-ghost:hover { background: #f5f5f5; }
+
+  .container { max-width: 1100px; margin: auto; padding: 0 1.5rem; }
+
+  /* HERO */
+  .hero { padding: 7rem 1.5rem 5rem; text-align: center; position: relative; background: linear-gradient(180deg, rgba(0,133,63,0.04) 0%, transparent 100%); }
+  .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,133,63,0.1); color: var(--green); font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 100px; margin-bottom: 2rem; }
+  .hero h1 { font-size: clamp(2.2rem, 5vw, 3.8rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 1.2rem; }
+  .hero h1 span { color: var(--green); }
+  .hero-sub { font-size: 1.1rem; color: #555; max-width: 480px; margin: 0 auto 0.5rem; }
+  .hero-sub2 { font-size: 1.1rem; font-weight: 600; max-width: 480px; margin: 0 auto 2.5rem; }
+  .hero-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-bottom: 2rem; }
+  .btn-primary { background: var(--green); color: white; padding: 13px 28px; border-radius: 10px; font-size: 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; }
+  .btn-primary:hover { background: var(--green-dark); }
+  .btn-outline { background: white; color: #333; border: 1.5px solid #ddd; padding: 13px 28px; border-radius: 10px; font-size: 16px; font-weight: 500; cursor: pointer; }
+  .btn-outline:hover { border-color: #999; }
+  .hero-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5rem; font-size: 13px; color: #777; }
+  .hero-pills span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; }
+
+  /* HOSPITALS */
+  .hospitals { padding: 3.5rem 1.5rem; border-top: 1px solid #eee; border-bottom: 1px solid #eee; background: #f9fafb; }
+  .section-label { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #999; margin-bottom: 2rem; }
+  .hospitals-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5rem 3rem; }
+  .hospital-item { display: flex; align-items: center; gap: 8px; color: #666; font-size: 13px; font-weight: 500; }
+  .hospital-item svg { color: var(--green); opacity: 0.7; }
+
+  /* STATS */
+  .stats { padding: 5rem 1.5rem; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+  .stat-card { text-align: center; padding: 2.5rem 2rem; border-radius: 16px; border: 1px solid #eee; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .stat-value { font-size: 2.8rem; font-weight: 800; color: var(--green); margin-bottom: 0.5rem; }
+  .stat-label { font-size: 13px; color: #777; line-height: 1.5; }
+
+  /* PROBLEMS */
+  .problems { padding: 5rem 1.5rem; background: #f9fafb; }
+  .section-header { text-align: center; margin-bottom: 3.5rem; }
+  .section-header h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 0.75rem; }
+  .section-header p { color: #666; font-size: 15px; max-width: 500px; margin: auto; }
+  .problems-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  .problem-card { background: white; border-radius: 16px; padding: 1.75rem; border: 1px solid #eee; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .problem-icon { font-size: 2rem; margin-bottom: 1rem; }
+  .problem-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .problem-card p { font-size: 13px; color: #666; line-height: 1.6; margin-bottom: 1rem; }
+  .fix-box { background: rgba(0,133,63,0.07); border-radius: 10px; padding: 10px 14px; display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--green); font-weight: 500; }
+  .fix-box svg { margin-top: 2px; flex-shrink: 0; }
+
+  /* FEATURES */
+  .features { padding: 5rem 1.5rem; }
+  .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  .feature-card { background: white; border-radius: 16px; padding: 1.75rem; border: 1px solid #eee; transition: box-shadow 0.2s, border-color 0.2s; }
+  .feature-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.08); border-color: rgba(0,133,63,0.25); }
+  .feature-icon { width: 40px; height: 40px; border-radius: 10px; background: rgba(0,133,63,0.08); display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; }
+  .feature-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 0.5rem; }
+  .feature-card p { font-size: 13px; color: #666; line-height: 1.6; }
+
+  /* ROLES */
+  .roles { padding: 5rem 1.5rem; background: #f9fafb; }
+  .roles-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; }
+  .role-card { background: white; border-radius: 16px; padding: 1.75rem; border: 1px solid #eee; text-align: center; transition: transform 0.2s, box-shadow 0.2s; }
+  .role-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+  .role-emoji { font-size: 2.5rem; margin-bottom: 1rem; }
+  .role-card h3 { font-weight: 600; margin-bottom: 0.5rem; }
+  .role-card p { font-size: 13px; color: #666; line-height: 1.6; margin-bottom: 1.2rem; }
+  .role-link { color: var(--green); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+
+  /* TESTIMONIALS */
+  .testimonials { padding: 5rem 1.5rem; }
+  .testimonials-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  .testimonial-card { background: white; border-radius: 16px; padding: 1.75rem; border: 1px solid #eee; display: flex; flex-direction: column; }
+  .stars { color: #f59e0b; font-size: 14px; margin-bottom: 1rem; letter-spacing: 2px; }
+  .testimonial-quote { font-size: 14px; color: #555; line-height: 1.7; flex: 1; margin-bottom: 1.5rem; font-style: italic; }
+  .testimonial-author { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--green); color: white; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .author-name { font-weight: 600; font-size: 14px; }
+  .author-role { font-size: 12px; color: #888; }
+  .author-hospital { font-size: 12px; color: var(--green); }
+
+  /* PRICING */
+  .pricing { padding: 5rem 1.5rem; background: #f9fafb; }
+  .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; max-width: 900px; margin: auto; }
+  .price-card { background: white; border-radius: 16px; padding: 2rem; border: 1px solid #eee; display: flex; flex-direction: column; }
+  .price-card.highlight { background: var(--green); border-color: var(--green); color: white; }
+  .price-plan { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); margin-bottom: 0.5rem; }
+  .price-name { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .price-amount { font-size: 2rem; font-weight: 800; color: var(--green); }
+  .price-card.highlight .price-amount { color: white; }
+  .price-period { font-size: 13px; color: #888; }
+  .price-card.highlight .price-period { color: rgba(255,255,255,0.65); }
+  .price-desc { font-size: 13px; color: #666; margin: 0.75rem 0 1.5rem; }
+  .price-card.highlight .price-desc { color: rgba(255,255,255,0.75); }
+  .price-features { list-style: none; flex: 1; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .price-features li { font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .price-card.highlight .price-features li { color: rgba(255,255,255,0.9); }
+  .check { color: var(--green); font-weight: 700; }
+  .price-card.highlight .check { color: white; }
+  .price-btn { background: var(--green); color: white; border: none; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; }
+  .price-card.highlight .price-btn { background: white; color: var(--green); }
+  .price-btn:hover { opacity: 0.9; }
+
+  /* CTA */
+  .cta { padding: 5rem 1.5rem; text-align: center; background: rgba(0,133,63,0.04); }
+  .cta-icon { width: 64px; height: 64px; border-radius: 16px; background: rgba(0,133,63,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 1.8rem; }
+  .cta h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 1rem; }
+  .cta p { color: #666; max-width: 420px; margin: 0 auto 2.5rem; }
+  .cta-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+
+  /* FOOTER */
+  footer { padding: 3rem 1.5rem; border-top: 1px solid #eee; }
+  .footer-inner { max-width: 1100px; margin: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem; }
+  .footer-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .footer-links { display: flex; gap: 2rem; font-size: 13px; color: #777; }
+  .footer-links a:hover { color: #333; }
+  .footer-copy { font-size: 13px; color: #999; }
+
+  /* APP PREVIEW MOCKUP */
+  .app-mockup { margin: 4rem auto 0; max-width: 860px; }
+  .mockup-shell { background: #1e2433; border-radius: 16px; padding: 1.5rem; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+  .mockup-bar { display: flex; gap: 6px; margin-bottom: 1rem; }
+  .mockup-bar span { width: 12px; height: 12px; border-radius: 50%; }
+  .mockup-bar span:nth-child(1) { background: #ff5f57; }
+  .mockup-bar span:nth-child(2) { background: #febc2e; }
+  .mockup-bar span:nth-child(3) { background: #28c840; }
+  .mockup-screen { background: #f4f5f7; border-radius: 10px; overflow: hidden; display: flex; }
+  .mock-sidebar { width: 200px; flex-shrink: 0; background: white; padding: 1rem; border-right: 1px solid #eee; }
+  .mock-logo-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; }
+  .mock-logo { width: 28px; height: 28px; border-radius: 6px; background: var(--green); }
+  .mock-name { font-size: 13px; font-weight: 700; }
+  .mock-nav-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; font-size: 12px; color: #555; margin-bottom: 2px; }
+  .mock-nav-item.active { background: rgba(0,133,63,0.08); color: var(--green); font-weight: 600; }
+  .mock-main { flex: 1; padding: 1.5rem; }
+  .mock-greeting { font-size: 18px; font-weight: 700; margin-bottom: 1rem; }
+  .mock-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1.5rem; }
+  .mock-stat { background: white; border-radius: 10px; padding: 12px; border: 1px solid #eee; }
+  .mock-stat-val { font-size: 20px; font-weight: 800; }
+  .mock-stat-label { font-size: 10px; color: #888; }
+  .mock-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mock-card { background: white; border-radius: 10px; padding: 12px; border: 1px solid #eee; cursor: pointer; }
+  .mock-card:hover { border-color: rgba(0,133,63,0.4); }
+  .mock-card-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .mock-card-sub { font-size: 10px; color: #888; }
+  .mock-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+  .badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+  .badge.critique { background: rgba(217,43,53,0.1); color: #D92B35; }
+  .badge.stable { background: rgba(0,133,63,0.1); color: var(--green); }
+  .badge.modere { background: rgba(200,122,0,0.1); color: var(--amber); }
+  .bed-num { font-size: 10px; color: #aaa; }
+
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .mockup-screen { flex-direction: column; }
+    .mock-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #eee; }
+    .mock-stats { grid-template-columns: repeat(2, 1fr); }
+    .mock-cards { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="logo">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#00853F"/>
+        <polyline points="4,16 9,16 12,8 16,24 20,12 23,16 28,16" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="logo-name">PulseBoard</span>
+      <span class="logo-badge">Sénégal</span>
+    </div>
+    <div class="nav-links">
+      <a href="#problemes">Problèmes</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#temoignages">Témoignages</a>
+      <a href="#tarifs">Tarifs</a>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-ghost">Se connecter</button>
+      <button class="nav-cta">Commencer <span>→</span></button>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4"/></svg>
+    Utilisé dans les hôpitaux sénégalais
+  </div>
+  <h1>Ton service,<br><span>dans ta poche.</span></h1>
+  <p class="hero-sub">Tu gères 25 patients. Tu n'as pas dormi depuis 22h.<br>La relève commence dans 10 minutes.</p>
+  <p class="hero-sub2">PulseBoard s'en souvient pour toi.</p>
+  <div class="hero-btns">
+    <button class="btn-primary">Essayer gratuitement →</button>
+    <button class="btn-outline">Voir les fonctionnalités</button>
+  </div>
+  <div class="hero-pills">
+    <span><span class="dot"></span> Gratuit pour commencer</span>
+    <span><span class="dot"></span> 2 minutes pour démarrer</span>
+    <span><span class="dot"></span> Fonctionne hors ligne</span>
+  </div>
+
+  <!-- App mockup -->
+  <div class="app-mockup">
+    <div class="mockup-shell">
+      <div class="mockup-bar"><span></span><span></span><span></span></div>
+      <div class="mockup-screen">
+        <div class="mock-sidebar">
+          <div class="mock-logo-row">
+            <div class="mock-logo"></div>
+            <span class="mock-name">PulseBoard</span>
+          </div>
+          <div class="mock-nav-item active">📊 Services</div>
+          <div class="mock-nav-item">📖 Journal</div>
+          <div class="mock-nav-item">💬 Messagerie</div>
+          <div class="mock-nav-item">👤 Profil</div>
+        </div>
+        <div class="mock-main">
+          <div class="mock-greeting">Bonjour, Dr. Ndiaye 👋</div>
+          <div class="mock-stats">
+            <div class="mock-stat"><div class="mock-stat-val" style="color:var(--green)">3</div><div class="mock-stat-label">Services</div></div>
+            <div class="mock-stat"><div class="mock-stat-val">28</div><div class="mock-stat-label">Patients</div></div>
+            <div class="mock-stat"><div class="mock-stat-val" style="color:var(--amber)">4</div><div class="mock-stat-label">Alertes</div></div>
+            <div class="mock-stat"><div class="mock-stat-val">67</div><div class="mock-stat-label">Lits</div></div>
+          </div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Mes services</div>
+          <div class="mock-cards">
+            <div class="mock-card">
+              <div class="mock-card-title">Cardiologie</div>
+              <div class="mock-card-sub">CHU de Fann · 24 lits</div>
+              <div class="mock-card-footer"><span class="badge critique">2 critiques</span><span class="bed-num">12/24</span></div>
+            </div>
+            <div class="mock-card">
+              <div class="mock-card-title">Neurologie</div>
+              <div class="mock-card-sub">CHU Le Dantec · 20 lits</div>
+              <div class="mock-card-footer"><span class="badge stable">Stable</span><span class="bed-num">8/20</span></div>
+            </div>
+            <div class="mock-card">
+              <div class="mock-card-title">Médecine Int.</div>
+              <div class="mock-card-sub">H. Principal · 23 lits</div>
+              <div class="mock-card-footer"><span class="badge modere">1 modéré</span><span class="bed-num">15/23</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOSPITALS -->
+<section class="hospitals" id="hopitaux">
+  <div class="section-label">Adopté dans les établissements sénégalais de référence</div>
+  <div class="hospitals-grid">
+    <div class="hospital-item">🏥 CHU Aristide Le Dantec — Dakar</div>
+    <div class="hospital-item">🏥 CHU de Fann — Dakar</div>
+    <div class="hospital-item">🏥 Hôpital Principal de Dakar</div>
+    <div class="hospital-item">🏥 Hôpital Abass Ndao — Dakar</div>
+    <div class="hospital-item">🏥 CHR de Thiès</div>
+    <div class="hospital-item">🏥 Hôpital de Ziguinchor</div>
+    <div class="hospital-item">🏥 Hôpital de Tambacounda</div>
+    <div class="hospital-item">🏥 Centre de Santé de Pikine</div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">60%</div><div class="stat-label">des erreurs médicales surviennent lors d'une mauvaise transmission de relève</div></div>
+      <div class="stat-card"><div class="stat-value">45min</div><div class="stat-label">de relève orale économisées par garde grâce à la génération automatique</div></div>
+      <div class="stat-card"><div class="stat-value">10s</div><div class="stat-label">pour générer et transmettre une relève complète structurée par priorité</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEMS -->
+<section class="problems" id="problemes">
+  <div class="section-header">
+    <h2>Tu connais ces situations ?</h2>
+    <p>Dans les services de Dakar, Thiès et Ziguinchor, on les vit tous les jours.</p>
+  </div>
+  <div class="container">
+    <div class="problems-grid">
+      <div class="problem-card">
+        <div class="problem-icon">📓</div>
+        <h3>Le carnet papier perdu</h3>
+        <p>Tu retrouves le carnet de l'interne de nuit sous une pile de bilans. Les décisions de 2h du matin sont illisibles.</p>
+        <div class="fix-box">✓ Fiche patient numérique, synchronisée, lisible par toute l'équipe.</div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">📱</div>
+        <h3>WhatsApp groupe du service</h3>
+        <p>"Lit 7 allergie pénicilline" entre les blagues et les vidéos. Un message critique noyé dans 200 autres.</p>
+        <div class="fix-box">✓ Messagerie dédiée avec logs cliniques et alertes visuelles.</div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">🔄</div>
+        <h3>La relève chaotique</h3>
+        <p>45 minutes à rassembler les feuilles, répéter les mêmes infos. La garde suivante repart dans le flou.</p>
+        <div class="fix-box">✓ Relève structurée générée automatiquement. Copiée sur WhatsApp en 1 tap.</div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">⚠️</div>
+        <h3>L'allergie oubliée</h3>
+        <p>M. Oumar Ndiaye est allergique à l'amoxicilline. L'interne de remplacement ne le sait pas. Le dossier était en cardio.</p>
+        <div class="fix-box">✓ Bandeau rouge d'allergie visible sur toutes les fiches, impossible à rater.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="fonctionnalites">
+  <div class="section-header">
+    <h2>Tout ce dont ton service a besoin</h2>
+    <p>Un outil qui pense comme toi — et qui te libère pour soigner.</p>
+  </div>
+  <div class="container">
+    <div class="features-grid">
+      <div class="feature-card"><div class="feature-icon">📊</div><h3>Tableau de bord intelligent</h3><p>Vue instantanée de vos lits, alertes actives et états des patients. Tout ce qu'il faut voir dès l'ouverture.</p></div>
+      <div class="feature-card"><div class="feature-icon">🛏️</div><h3>Gestion des lits en temps réel</h3><p>Chaque patient, son lit, son statut. Visualisez l'occupation du service d'un seul regard.</p></div>
+      <div class="feature-card"><div class="feature-icon">🔔</div><h3>Alertes automatiques</h3><p>DPS manquante, allergie non documentée, sortie prévue — rien ne vous échappe même à 3h du matin.</p></div>
+      <div class="feature-card"><div class="feature-icon">📄</div><h3>Relève en 10 secondes</h3><p>Générée par priorité (Critiques → Modérés → Stables). Copie WhatsApp et export PDF médico-légal.</p></div>
+      <div class="feature-card"><div class="feature-icon">💬</div><h3>Messagerie d'équipe sécurisée</h3><p>Chat interne lié au service. Logs automatiques des admissions et décisions cliniques horodatées.</p></div>
+      <div class="feature-card"><div class="feature-icon">🔒</div><h3>Données protégées</h3><p>Accès limité à votre équipe. Zéro données sur des serveurs non sécurisés, zéro nom de patient sur WhatsApp.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROLES -->
+<section class="roles" id="roles">
+  <div class="section-header">
+    <h2>Pour toute l'équipe médicale</h2>
+    <p>Externe, interne, résident ou médecin — PulseBoard s'adapte à ton rôle.</p>
+  </div>
+  <div class="container">
+    <div class="roles-grid">
+      <div class="role-card"><div class="role-emoji">🎓</div><h3>Externe</h3><p>Observez, apprenez et contribuez à la prise en charge des patients.</p><a class="role-link" href="#">Commencer →</a></div>
+      <div class="role-card"><div class="role-emoji">🩺</div><h3>Interne</h3><p>Gérez vos 20 patients du service, rédigez vos notes DAR/SOAP et préparez la relève en un tap.</p><a class="role-link" href="#">Commencer →</a></div>
+      <div class="role-card"><div class="role-emoji">📋</div><h3>Résident</h3><p>Supervisez l'équipe, validez les décisions critiques et assurez la continuité des soins.</p><a class="role-link" href="#">Commencer →</a></div>
+      <div class="role-card"><div class="role-emoji">👨‍⚕️</div><h3>Chef de service</h3><p>Vue d'ensemble sur tous vos services, indicateurs qualité et communication centralisée.</p><a class="role-link" href="#">Commencer →</a></div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials" id="temoignages">
+  <div class="section-header">
+    <h2>Ce qu'en pensent les équipes</h2>
+    <p>Des médecins et internes sénégalais qui l'utilisent au quotidien.</p>
+  </div>
+  <div class="container">
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-quote">"Avant PulseBoard, notre relève durait 1h. Maintenant en 10 minutes c'est bouclé. Les internes arrivent préparés, les patients sont mieux pris en charge."</p>
+        <div class="testimonial-author">
+          <div class="avatar">AS</div>
+          <div><div class="author-name">Dr. Aminata Sow</div><div class="author-role">Chef de Service Cardiologie</div><div class="author-hospital">CHU de Fann, Dakar</div></div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-quote">"J'ai perdu un carnet de garde avec les allergies de 15 patients. Depuis PulseBoard, c'est une situation qui ne peut plus jamais arriver."</p>
+        <div class="testimonial-author">
+          <div class="avatar">MN</div>
+          <div><div class="author-name">Dr. Moussa Ndiaye</div><div class="author-role">Interne en Médecine Interne</div><div class="author-hospital">CHU Aristide Le Dantec</div></div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-quote">"La fonction relève m'a sauvé la mise plusieurs fois. On envoie le PDF au chef avant même qu'il arrive dans le service."</p>
+        <div class="testimonial-author">
+          <div class="avatar">FD</div>
+          <div><div class="author-name">Dr. Fatou Diallo</div><div class="author-role">Résidente en Neurologie</div><div class="author-hospital">Hôpital Principal de Dakar</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="tarifs">
+  <div class="section-header">
+    <h2>Tarifs transparents</h2>
+    <p>Commencez gratuitement. Passez à la vitesse supérieure quand votre équipe en a besoin.</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="price-name">Gratuit</div>
+      <div><span class="price-amount">0</span> <span style="font-size:1rem;font-weight:700;color:var(--green)">FCFA</span></div>
+      <div class="price-period">pour toujours</div>
+      <p class="price-desc">Pour découvrir PulseBoard et les petits services</p>
+      <ul class="price-features">
+        <li><span class="check">✓</span> Jusqu'à 3 patients actifs</li>
+        <li><span class="check">✓</span> 1 service</li>
+        <li><span class="check">✓</span> Relève basique</li>
+        <li><span class="check">✓</span> Messagerie d'équipe</li>
+      </ul>
+      <button class="price-btn" style="background:var(--green);color:white">Commencer gratuitement</button>
+    </div>
+    <div class="price-card highlight">
+      <div class="price-plan">Le plus populaire</div>
+      <div class="price-name">Service</div>
+      <div><span class="price-amount">15 000</span></div>
+      <div class="price-period">FCFA / mois</div>
+      <p class="price-desc">Pour les services avec une équipe active</p>
+      <ul class="price-features">
+        <li><span class="check">✓</span> Patients illimités</li>
+        <li><span class="check">✓</span> Relève IA + PDF officiel</li>
+        <li><span class="check">✓</span> Messagerie avancée</li>
+        <li><span class="check">✓</span> Journal de garde</li>
+        <li><span class="check">✓</span> Alertes en temps réel</li>
+        <li><span class="check">✓</span> Export médico-légal</li>
+      </ul>
+      <button class="price-btn">Essayer 30 jours gratuit</button>
+    </div>
+    <div class="price-card">
+      <div class="price-name">Hôpital</div>
+      <div style="font-size:2rem;font-weight:800;color:var(--green)">Sur devis</div>
+      <div class="price-period">&nbsp;</div>
+      <p class="price-desc">Déploiement complet pour un établissement</p>
+      <ul class="price-features">
+        <li><span class="check">✓</span> Services illimités</li>
+        <li><span class="check">✓</span> Administration centrale</li>
+        <li><span class="check">✓</span> Intégration DSP</li>
+        <li><span class="check">✓</span> Formation des équipes</li>
+        <li><span class="check">✓</span> Support 24/7</li>
+      </ul>
+      <button class="price-btn" style="background:var(--green);color:white">Nous contacter</button>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="cta-icon">⚡</div>
+  <h2>Prêt à transformer ta garde ?</h2>
+  <p>Rejoins les équipes soignantes sénégalaises qui utilisent PulseBoard pour améliorer la prise en charge de leurs patients.</p>
+  <div class="cta-btns">
+    <button class="btn-primary">Commencer gratuitement →</button>
+    <button class="btn-outline">📞 Nous contacter</button>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="8" fill="#00853F"/>
+        <polyline points="4,16 9,16 12,8 16,24 20,12 23,16 28,16" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      PulseBoard <span style="font-weight:400;color:#999;margin-left:4px">Sénégal</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">Fonctionnalités</a>
+      <a href="#">Tarifs</a>
+      <a href="#">Contact</a>
+    </div>
+    <div class="footer-copy">© 2026 PulseBoard. Conçu pour les soignants sénégalais. 🇸🇳</div>
+  </div>
+</footer>
+
+</body>
+</html>

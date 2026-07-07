@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PulseBoard — Connexion</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #00853F; --green-dark: #005f2d; --green-light: rgba(0,133,63,0.09);
+  --red: #D92B35; --amber: #c87a00;
+  --border: #e4e7ec; --muted: #667085; --text: #101828;
+}
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh; display: flex; background: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── LEFT PANEL ── */
+.left {
+  width: 48%; background: var(--green); display: flex; flex-direction: column;
+  padding: 48px; position: relative; overflow: hidden;
+}
+.left::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 20% 80%, rgba(255,255,255,0.08) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 20%, rgba(0,0,0,0.12) 0%, transparent 50%);
+}
+/* ECG static decoration */
+.ecg-line {
+  position: absolute; bottom: 120px; left: 0; right: 0; height: 80px;
+  opacity: 0.15; pointer-events: none;
+}
+
+.left-content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: auto; }
+.brand-logo { width: 42px; height: 42px; }
+.brand-name { font-size: 22px; font-weight: 800; color: white; letter-spacing: -0.5px; }
+.brand-badge { font-size: 11px; color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.12); padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+
+.hero-text { margin-top: auto; margin-bottom: 48px; }
+.hero-tag { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-bottom: 16px; }
+.hero-title { font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; color: white; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 16px; }
+.hero-sub { font-size: 15px; color: rgba(255,255,255,0.72); line-height: 1.6; max-width: 380px; }
+
+.testimonial { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); border-radius: 16px; padding: 20px 22px; }
+.testimonial-quote { font-size: 14px; color: rgba(255,255,255,0.88); line-height: 1.65; font-style: italic; margin-bottom: 14px; }
+.testimonial-author { display: flex; align-items: center; gap: 10px; }
+.t-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; flex-shrink: 0; }
+.t-name { font-size: 13px; font-weight: 700; color: white; }
+.t-role { font-size: 11px; color: rgba(255,255,255,0.6); }
+.stars { color: rgba(255,200,50,0.9); font-size: 12px; letter-spacing: 1px; margin-bottom: 3px; }
+
+.hospitals-strip { display: flex; gap: 16px; margin-top: 20px; flex-wrap: wrap; }
+.hosp-pill { font-size: 11px; color: rgba(255,255,255,0.55); display: flex; align-items: center; gap: 5px; }
+.hosp-pill::before { content: '🏥'; font-size: 10px; }
+
+/* ── RIGHT PANEL ── */
+.right {
+  flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: 48px 40px; background: #fff; position: relative;
+}
+.back-link {
+  position: absolute; top: 28px; left: 32px;
+  display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
+  text-decoration: none; transition: color .15s;
+}
+.back-link:hover { color: var(--text); }
+.back-link svg { width: 16px; height: 16px; }
+
+.lang-btn {
+  position: absolute; top: 28px; right: 32px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
+  font-size: 12px; color: var(--muted); background: none; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all .15s;
+}
+.lang-btn:hover { background: #f9fafb; }
+
+.form-container { width: 100%; max-width: 400px; }
+
+.form-header { margin-bottom: 32px; }
+.form-logo { display: none; align-items: center; gap: 10px; margin-bottom: 28px; }
+.form-title { font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; margin-bottom: 8px; }
+.form-sub { font-size: 14px; color: var(--muted); line-height: 1.5; }
+.form-sub span { color: var(--green); font-weight: 600; }
+
+/* OAUTH BUTTON */
+.oauth-btn {
+  width: 100%; padding: 12px 20px; border: 1.5px solid var(--border); border-radius: 10px;
+  background: #fff; font-size: 14px; font-weight: 600; color: var(--text);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .15s; margin-bottom: 10px;
+}
+.oauth-btn:hover { background: #f9fafb; border-color: #c4c9d4; }
+.oauth-btn.google { }
+.oauth-btn.microsoft { }
+
+.divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.divider span { font-size: 12px; color: #aaa; white-space: nowrap; }
+
+/* FORM */
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 13px; font-weight: 600; color: #344054; margin-bottom: 6px; }
+.field-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.field-row label { margin-bottom: 0; }
+.forgot { font-size: 12.5px; color: var(--green); font-weight: 500; text-decoration: none; }
+.forgot:hover { text-decoration: underline; }
+
+.input-wrap { position: relative; }
+.input {
+  width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 14px; color: var(--text); background: #fff; outline: none;
+  transition: border-color .15s, box-shadow .15s; font-family: inherit;
+}
+.input::placeholder { color: #aab0bc; }
+.input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(0,133,63,.1); }
+.input.error { border-color: var(--red); }
+.input-icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #aaa; cursor: pointer; padding: 4px; }
+.input-icon:hover { color: #666; }
+.input-prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #aaa; pointer-events: none; }
+
+.field-error { font-size: 12px; color: var(--red); margin-top: 5px; display: none; }
+.field-error.show { display: block; }
+
+.remember-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+.checkbox { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer; }
+.remember-label { font-size: 13px; color: var(--muted); cursor: pointer; }
+
+.submit-btn {
+  width: 100%; padding: 13px; background: var(--green); color: white;
+  border: none; border-radius: 10px; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  letter-spacing: .01em;
+}
+.submit-btn:hover { background: var(--green-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,133,63,.25); }
+.submit-btn:active { transform: translateY(0); }
+.submit-btn.loading { opacity: .7; pointer-events: none; }
+.submit-btn .spinner {
+  width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.4); border-top-color: white;
+  border-radius: 50%; animation: spin .7s linear infinite; display: none;
+}
+.submit-btn.loading .spinner { display: block; }
+.submit-btn.loading .btn-text { display: none; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.form-footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
+.form-footer a { color: var(--green); font-weight: 600; text-decoration: none; }
+.form-footer a:hover { text-decoration: underline; }
+
+.security-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 24px; font-size: 11.5px; color: #aab0bc; }
+.security-note svg { width: 13px; height: 13px; }
+
+/* REGISTER VIEW */
+.register-view { display: none; }
+.register-view.show { display: block; }
+.login-view.hide { display: none; }
+
+/* FORGOT VIEW */
+.forgot-view { display: none; }
+.forgot-view.show { display: block; }
+
+/* SUCCESS */
+.success-box {
+  display: none; text-align: center; padding: 24px;
+  background: var(--green-light); border: 1px solid rgba(0,133,63,.2);
+  border-radius: 14px; margin-bottom: 20px;
+}
+.success-box.show { display: block; }
+.success-icon { font-size: 2.5rem; margin-bottom: 10px; }
+.success-title { font-weight: 700; color: var(--green); margin-bottom: 6px; }
+.success-sub { font-size: 13px; color: #555; }
+
+/* INPUT STRENGTH */
+.password-strength { margin-top: 8px; display: none; }
+.password-strength.show { display: block; }
+.strength-bar { height: 4px; border-radius: 2px; background: #eee; margin-bottom: 5px; overflow: hidden; }
+.strength-fill { height: 100%; border-radius: 2px; transition: width .3s, background .3s; }
+.strength-label { font-size: 11px; color: var(--muted); }
+
+/* ERROR ALERT */
+.alert-error {
+  background: rgba(217,43,53,.07); border: 1px solid rgba(217,43,53,.2);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 18px;
+  font-size: 13px; color: var(--red); display: none; align-items: center; gap: 8px;
+}
+.alert-error.show { display: flex; }
+
+/* ROLE SELECTOR */
+.role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+.role-option { border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: all .15s; text-align: center; }
+.role-option:hover { border-color: rgba(0,133,63,.3); background: var(--green-light); }
+.role-option.selected { border-color: var(--green); background: var(--green-light); }
+.role-option .role-emoji { font-size: 1.5rem; margin-bottom: 4px; }
+.role-option .role-name { font-size: 12px; font-weight: 600; color: var(--text); }
+.role-option.selected .role-name { color: var(--green); }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  .left { width: 100%; padding: 32px 24px; min-height: auto; }
+  .hero-text { margin-top: 32px; margin-bottom: 24px; }
+  .testimonial { display: none; }
+  .left::after { display: none; }
+  .right { padding: 32px 24px; }
+  .back-link { top: 16px; left: 16px; }
+  .lang-btn { top: 16px; right: 16px; }
+  .form-logo { display: flex; }
+}
+</style>
+</head>
+<body>
+
+<!-- LEFT -->
+<div class="left">
+  <svg class="ecg-line" viewBox="0 0 1000 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <polyline points="0,40 100,40 150,10 200,70 250,5 300,75 350,40 500,40 550,40 600,10 650,70 700,5 750,75 800,40 1000,40" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div class="left-content">
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="42" height="42" rx="10" fill="rgba(255,255,255,0.15)"/>
+        <polyline points="5,21 11,21 15,10 21,32 27,14 31,21 37,21" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-name">PulseBoard</span>
+      <span class="brand-badge">🇸🇳 Sénégal</span>
+    </div>
+
+    <div class="hero-text">
+      <div class="hero-tag">Plateforme médicale numérique</div>
+      <h1 class="hero-title">Rien ne tombe<br>en garde.</h1>
+      <p class="hero-sub">PulseBoard centralise vos patients, relèves et alertes. Accessible à 3h du matin, sur smartphone, même sans connexion stable.</p>
+    </div>
+
+    <div class="testimonial">
+      <div class="stars">★★★★★</div>
+      <p class="testimonial-quote">"En 2 minutes de config, toute l'équipe de cardiologie était connectée. La relève du lendemain matin était prête avant même que le chef arrive."</p>
+      <div class="testimonial-author">
+        <div class="t-avatar">AS</div>
+        <div>
+          <div class="t-name">Dr. Aminata Sow</div>
+          <div class="t-role">Chef de Service Cardiologie · CHU de Fann</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hospitals-strip">
+      <span class="hosp-pill">CHU Aristide Le Dantec</span>
+      <span class="hosp-pill">CHU de Fann</span>
+      <span class="hosp-pill">Hôpital Principal</span>
+      <span class="hosp-pill">CHR de Thiès</span>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT -->
+<div class="right">
+  <a href="preview.html" class="back-link">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    Retour à l'accueil
+  </a>
+
+  <button class="lang-btn" onclick="toggleLang(this)">
+    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 010 20M2 12h20"/></svg>
+    Français
+  </button>
+
+  <div class="form-container">
+
+    <!-- ── LOGIN VIEW ── -->
+    <div class="login-view" id="loginView">
+
+      <div class="form-header">
+        <div class="form-logo">
+          <svg width="32" height="32" viewBox="0 0 42 42" fill="none">
+            <rect width="42" height="42" rx="10" fill="#00853F"/>
+            <polyline points="5,21 11,21 15,10 21,32 27,14 31,21 37,21" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span style="font-weight:800;font-size:16px">PulseBoard</span>
+        </div>
+        <h1 class="form-title">Bon retour 👋</h1>
+        <p class="form-sub">Connectez-vous à votre espace <span>PulseBoard</span>.</p>
+      </div>
+
+      <!-- OAuth -->
+      <button class="oauth-btn google" onclick="handleOAuth('Google')">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Continuer avec Google
+      </button>
+      <button class="oauth-btn microsoft" onclick="handleOAuth('Microsoft')">
+        <svg width="18" height="18" viewBox="0 0 24 24"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="13" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="13" width="10" height="10" fill="#00A4EF"/><rect x="13" y="13" width="10" height="10" fill="#FFB900"/></svg>
+        Continuer avec Microsoft
+      </button>
+
+      <div class="divider"><span>ou avec votre email</span></div>
+
+      <div class="alert-error" id="loginError">
+        ⚠️ <span id="loginErrorMsg">Email ou mot de passe incorrect.</span>
+      </div>
+
+      <form onsubmit="handleLogin(event)">
+        <div class="field">
+          <label for="email">Adresse email professionnelle</label>
+          <div class="input-wrap">
+            <input class="input" type="email" id="email" placeholder="dr.ndiaye@chu-fann.sn" autocomplete="email" required/>
+          </div>
+          <div class="field-error" id="emailError">Entrez une adresse email valide.</div>
+        </div>
+
+        <div class="field">
+          <div class="field-row">
+            <label for="password">Mot de passe</label>
+            <a href="#" class="forgot" onclick="showForgot(event)">Mot de passe oublié ?</a>
+          </div>
+          <div class="input-wrap">
+            <input class="input" type="password" id="password" placeholder="••••••••" autocomplete="current-password" required/>
+            <span class="input-icon" onclick="togglePassword('password', this)">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" id="eyeIcon"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+          </div>
+          <div class="field-error" id="passwordError">Mot de passe requis.</div>
+        </div>
+
+        <div class="remember-row">
+          <input class="checkbox" type="checkbox" id="remember"/>
+          <label class="remember-label" for="remember">Rester connecté sur cet appareil</label>
+        </div>
+
+        <button class="submit-btn" type="submit" id="loginBtn">
+          <div class="spinner"></div>
+          <span class="btn-text">Se connecter →</span>
+        </button>
+      </form>
+
+      <div class="form-footer">
+        Pas encore de compte ?
+        <a href="#" onclick="showRegister(event)">Créer un compte gratuit</a>
+      </div>
+
+      <div class="security-note">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Données chiffrées · Accès sécurisé · RGPD
+      </div>
+    </div>
+
+    <!-- ── REGISTER VIEW ── -->
+    <div class="register-view" id="registerView">
+      <div class="form-header">
+        <h1 class="form-title">Créer un compte 🩺</h1>
+        <p class="form-sub">Gratuit jusqu'à <span>3 patients</span>. Aucune carte bancaire.</p>
+      </div>
+
+      <div class="alert-error" id="registerError">
+        ⚠️ <span id="registerErrorMsg">Une erreur est survenue.</span>
+      </div>
+
+      <form onsubmit="handleRegister(event)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+          <div class="field" style="margin-bottom:0">
+            <label for="firstName">Prénom</label>
+            <input class="input" type="text" id="firstName" placeholder="Aminata" required/>
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label for="lastName">Nom</label>
+            <input class="input" type="text" id="lastName" placeholder="Sow" required/>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="regEmail">Email professionnel</label>
+          <input class="input" type="email" id="regEmail" placeholder="dr.sow@chu-fann.sn" required/>
+        </div>
+
+        <div class="field">
+          <label>Votre rôle</label>
+          <div class="role-grid">
+            <div class="role-option" onclick="selectRole(this, 'externe')"><div class="role-emoji">🎓</div><div class="role-name">Externe</div></div>
+            <div class="role-option selected" onclick="selectRole(this, 'interne')"><div class="role-emoji">🩺</div><div class="role-name">Interne</div></div>
+            <div class="role-option" onclick="selectRole(this, 'resident')"><div class="role-emoji">📋</div><div class="role-name">Résident</div></div>
+            <div class="role-option" onclick="selectRole(this, 'medecin')"><div class="role-emoji">👨‍⚕️</div><div class="role-name">Médecin</div></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="regPassword">Mot de passe</label>
+          <div class="input-wrap">
+            <input class="input" type="password" id="regPassword" placeholder="8 caractères minimum" oninput="checkStrength(this)" required/>
+            <span class="input-icon" onclick="togglePassword('regPassword', this)">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+          </div>
+          <div class="password-strength" id="strengthBox">
+            <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
+            <div class="strength-label" id="strengthLabel"></div>
+          </div>
+        </div>
+
+        <button class="submit-btn" type="submit" id="registerBtn" style="margin-bottom:14px">
+          <div class="spinner"></div>
+          <span class="btn-text">Créer mon compte gratuit →</span>
+        </button>
+
+        <div style="font-size:11.5px;color:#aaa;text-align:center;line-height:1.6">
+          En créant un compte, vous acceptez nos <a href="#" style="color:var(--green)">Conditions d'utilisation</a> et notre <a href="#" style="color:var(--green)">Politique de confidentialité</a>.
+        </div>
+      </form>
+
+      <div class="form-footer" style="margin-top:16px">
+        Déjà un compte ?
+        <a href="#" onclick="showLogin(event)">Se connecter</a>
+      </div>
+    </div>
+
+    <!-- ── FORGOT VIEW ── -->
+    <div class="forgot-view" id="forgotView">
+      <div class="form-header">
+        <h1 class="form-title">Mot de passe oublié ?</h1>
+        <p class="form-sub">Entrez votre email, nous vous enverrons un lien de réinitialisation.</p>
+      </div>
+
+      <div class="success-box" id="forgotSuccess">
+        <div class="success-icon">📧</div>
+        <div class="success-title">Email envoyé !</div>
+        <div class="success-sub">Vérifiez votre boîte mail. Le lien est valable 30 minutes.</div>
+      </div>
+
+      <form onsubmit="handleForgot(event)" id="forgotForm">
+        <div class="field">
+          <label for="forgotEmail">Adresse email</label>
+          <input class="input" type="email" id="forgotEmail" placeholder="dr.ndiaye@chu-fann.sn" required/>
+        </div>
+        <button class="submit-btn" type="submit" id="forgotBtn" style="margin-bottom:16px">
+          <div class="spinner"></div>
+          <span class="btn-text">Envoyer le lien →</span>
+        </button>
+      </form>
+
+      <div class="form-footer">
+        <a href="#" onclick="showLogin(event)">← Retour à la connexion</a>
+      </div>
+    </div>
+
+  </div><!-- /form-container -->
+</div><!-- /right -->
+
+<script>
+let selectedRole = 'interne';
+
+// ── VIEW SWITCHING ──
+function showRegister(e) { e?.preventDefault(); document.getElementById('loginView').classList.add('hide'); document.getElementById('registerView').classList.add('show'); document.getElementById('forgotView').classList.remove('show'); }
+function showLogin(e) { e?.preventDefault(); document.getElementById('loginView').classList.remove('hide'); document.getElementById('registerView').classList.remove('show'); document.getElementById('forgotView').classList.remove('show'); }
+function showForgot(e) { e?.preventDefault(); document.getElementById('loginView').classList.add('hide'); document.getElementById('forgotView').classList.add('show'); document.getElementById('registerView').classList.remove('show'); }
+
+// ── OAUTH ──
+function handleOAuth(provider) {
+  showToast(`Connexion ${provider}`, `Redirection vers ${provider}...`);
+  setTimeout(() => { window.location.href = 'dashboard.html'; }, 1200);
+}
+
+// ── LOGIN ──
+function handleLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginError');
+  err.classList.remove('show');
+
+  const email = document.getElementById('email').value;
+  const pass = document.getElementById('password').value;
+
+  btn.classList.add('loading');
+
+  setTimeout(() => {
+    btn.classList.remove('loading');
+    // Demo: accept any email ending in .sn or specific combos
+    if (email && pass.length >= 4) {
+      window.location.href = 'dashboard.html';
+    } else {
+      err.classList.add('show');
+      document.getElementById('loginErrorMsg').textContent = 'Email ou mot de passe incorrect. Essayez avec n\'importe quel email valide.';
+      document.getElementById('password').classList.add('error');
+      setTimeout(() => document.getElementById('password').classList.remove('error'), 2000);
+    }
+  }, 1000);
+}
+
+// ── REGISTER ──
+function handleRegister(e) {
+  e.preventDefault();
+  const btn = document.getElementById('registerBtn');
+  btn.classList.add('loading');
+  setTimeout(() => {
+    btn.classList.remove('loading');
+    window.location.href = 'dashboard.html';
+  }, 1200);
+}
+
+// ── FORGOT ──
+function handleForgot(e) {
+  e.preventDefault();
+  const btn = document.getElementById('forgotBtn');
+  btn.classList.add('loading');
+  setTimeout(() => {
+    btn.classList.remove('loading');
+    document.getElementById('forgotForm').style.display = 'none';
+    document.getElementById('forgotSuccess').classList.add('show');
+  }, 1000);
+}
+
+// ── PASSWORD TOGGLE ──
+function togglePassword(id, btn) {
+  const input = document.getElementById(id);
+  const isPass = input.type === 'password';
+  input.type = isPass ? 'text' : 'password';
+  btn.innerHTML = isPass
+    ? `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+    : `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+}
+
+// ── PASSWORD STRENGTH ──
+function checkStrength(input) {
+  const val = input.value;
+  const box = document.getElementById('strengthBox');
+  const fill = document.getElementById('strengthFill');
+  const label = document.getElementById('strengthLabel');
+
+  if (!val) { box.classList.remove('show'); return; }
+  box.classList.add('show');
+
+  let score = 0;
+  if (val.length >= 8) score++;
+  if (val.length >= 12) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+
+  const levels = [
+    { pct: '20%', color: '#D92B35', text: 'Très faible' },
+    { pct: '40%', color: '#D92B35', text: 'Faible' },
+    { pct: '60%', color: '#c87a00', text: 'Moyen' },
+    { pct: '80%', color: '#1a56a0', text: 'Fort' },
+    { pct: '100%', color: '#00853F', text: 'Très fort ✓' },
+  ];
+  const lvl = levels[Math.min(score, 4)];
+  fill.style.width = lvl.pct;
+  fill.style.background = lvl.color;
+  label.textContent = lvl.text;
+  label.style.color = lvl.color;
+}
+
+// ── ROLE SELECTION ──
+function selectRole(el, role) {
+  document.querySelectorAll('.role-option').forEach(r => r.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedRole = role;
+}
+
+// ── LANG TOGGLE ──
+function toggleLang(btn) {
+  const langs = ['Français', 'English', 'Wolof'];
+  const cur = langs.indexOf(btn.textContent.trim());
+  btn.childNodes[btn.childNodes.length - 1].textContent = ' ' + langs[(cur + 1) % langs.length];
+}
+
+// ── TOAST ──
+function showToast(title, msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:white;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:500;z-index:999;animation:fadeIn .2s';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+</script>
+</body>
+</html>

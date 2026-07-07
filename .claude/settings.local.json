@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "PowerShell(\\(Get-Command pnpm -ErrorAction SilentlyContinue\\).Source; \\(Get-Command npm -ErrorAction SilentlyContinue\\).Source; \\(Get-Command node -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell($env:PATH -split ';' | Where-Object { $_ -ne '' })",
+      "PowerShell(Get-ChildItem \"$env:LOCALAPPDATA\\\\Programs\" -Directory -ErrorAction SilentlyContinue | Select-Object Name | Format-List)",
+      "WebFetch(domain:www.medboard.site)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(pnpm --version)",
+      "Bash(powershell -Command \"node --version; pnpm --version\")",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); node --version; npm --version)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); npm install -g pnpm; pnpm --version)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; pnpm install 2>&1 | Select-Object -Last 20)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; pnpm add better-sqlite3 bcryptjs; pnpm add -D @types/better-sqlite3 @types/bcryptjs)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; pnpm approve-builds)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; pnpm rebuild better-sqlite3 2>&1 | Select-Object -Last 5)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; node -e \"require\\('better-sqlite3'\\)\" 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; pnpm drizzle-kit push 2>&1)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; pnpm add @libsql/client; pnpm remove better-sqlite3 2>&1 | Select-Object -Last 5)",
+      "PowerShell(\\(Get-Command pnpm\\).Source)",
+      "PowerShell(try { \\(Get-Command node -ErrorAction Stop\\).Source } catch { Get-ChildItem \"C:\\\\Program Files\\\\nodejs\" -Filter \"node.exe\" 2>$null | Select-Object -First 1 -ExpandProperty FullName })",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; & \"C:\\\\Users\\\\salig\\\\AppData\\\\Roaming\\\\npm\\\\pnpm.cmd\" add -D cross-env 2>&1 | Select-Object -Last 5)",
+      "PowerShell($null)",
+      "PowerShell(netstat -ano)",
+      "PowerShell(Get-Process -Name \"node\",\"tsx\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-NetTCPConnection -State Listen -LocalPort 3000 -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-NetTCPConnection -State Listen -LocalPort 3001 -ErrorAction SilentlyContinue)",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; $proc = Start-Process powershell -ArgumentList \"-ExecutionPolicy\",\"Bypass\",\"-Command\",\"& 'C:\\\\Users\\\\salig\\\\AppData\\\\Roaming\\\\npm\\\\pnpm.cmd' dev\" -PassThru -WindowStyle Hidden; Start-Sleep -Seconds 15; Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -ge 3000 -and $_.LocalPort -le 3010 } | Select-Object LocalPort, OwningProcess)",
+      "Bash(python3 -c ' *)",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; Set-Location \"C:\\\\Users\\\\salig\\\\OneDrive\\\\Bureau\\\\medboard\"; node fix-encoding.mjs 2>&1)"
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1779580111179,
+      "tag": "0000_high_may_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1779583627753,
+      "tag": "0001_late_moonstone",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779585627799,
+      "tag": "0002_redundant_malice",
+      "breakpoints": true
+    }
+  ]
+}

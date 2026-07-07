@@ -1,0 +1,39 @@
+{
+  "name": "PulseBoard — Sénégal",
+  "short_name": "PulseBoard",
+  "description": "L'outil de gestion médicale pensé pour les équipes soignantes sénégalaises. Relève, patients, alertes.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00853F",
+  "lang": "fr",
+  "orientation": "portrait-primary",
+  "categories": ["medical", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-72.png",  "sizes": "72x72",   "type": "image/png" },
+    { "src": "/icons/icon-96.png",  "sizes": "96x96",   "type": "image/png" },
+    { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon.svg",     "sizes": "any",     "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mon service",
+      "short_name": "Service",
+      "description": "Accéder à mon service",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Mon Stage",
+      "short_name": "Stage",
+      "description": "Carnet de stage personnel",
+      "url": "/mon-stage",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ]
+}

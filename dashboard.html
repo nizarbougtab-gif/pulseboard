@@ -1,0 +1,3124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PulseBoard — Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #00853F; --green-dark: #005f2d; --green-light: rgba(0,133,63,0.09);
+  --red: #D92B35; --red-light: rgba(217,43,53,0.09);
+  --amber: #c87a00; --amber-light: rgba(200,122,0,0.09);
+  --blue: #1a56a0; --blue-light: rgba(26,86,160,0.09);
+  --border: #e8eaed; --bg: #f4f6f8; --sidebar-w: 240px;
+}
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: #1a1a2e; height: 100vh; overflow: hidden; display: flex; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  background: #fff; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; height: 100vh; overflow-y: auto;
+}
+.sidebar-logo { padding: 18px 16px 12px; display: flex; align-items: center; gap: 10px; }
+.sidebar-logo svg { width: 32px; height: 32px; flex-shrink: 0; }
+.logo-text { font-weight: 800; font-size: 15px; letter-spacing: -0.3px; }
+.sidebar-section { padding: 8px 10px 4px; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #aaa; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin: 1px 6px;
+  border-radius: 9px; font-size: 13.5px; color: #555; cursor: pointer;
+  transition: all .15s; position: relative; border: none; background: none; width: calc(100% - 12px); text-align: left;
+}
+.nav-item:hover { background: #f3f4f6; color: #222; }
+.nav-item.active { background: var(--green-light); color: var(--green); font-weight: 600; }
+.nav-item .icon { width: 18px; height: 18px; flex-shrink: 0; }
+.nav-item .badge-dot { width: 7px; height: 7px; background: var(--red); border-radius: 50%; margin-left: auto; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.nav-item .count-badge { margin-left: auto; background: var(--red-light); color: var(--red); font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; }
+
+.sidebar-services { padding: 4px 6px; flex: 1; }
+.service-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: #555; transition: all .15s; margin-bottom: 1px;
+}
+.service-item:hover { background: #f3f4f6; }
+.service-item.active { background: var(--green-light); color: var(--green); font-weight: 600; }
+.service-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.service-info { flex: 1; min-width: 0; }
+.service-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.service-sub { font-size: 11px; color: #aaa; }
+.service-alert { font-size: 11px; font-weight: 700; color: var(--red); }
+
+.sidebar-footer { padding: 10px 10px; border-top: 1px solid var(--border); }
+.user-row { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.user-name { font-size: 13px; font-weight: 600; }
+.user-role { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: .04em; }
+.logout-btn { margin-left: auto; background: none; border: none; color: #ccc; cursor: pointer; padding: 4px; border-radius: 6px; }
+/* role badge */
+.role-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; font-size: 10px; font-weight: 700; padding: 2px 7px; letter-spacing: .03em; margin-top: 3px; }
+.role-etudiant  { background: #EFF6FF; color: #2563EB; }
+.role-interne   { background: #F0FAF4; color: #00853F; }
+.role-resident  { background: #FFF7ED; color: #C2410C; }
+.role-chef      { background: #FDF4FF; color: #7C3AED; }
+/* garde toggle */
+.garde-toggle { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: #f9fafb; border: 1.5px solid var(--border); cursor: pointer; font-size: 11px; font-weight: 600; color: #555; width: 100%; }
+.garde-toggle.active { background: #FFF7ED; border-color: #FED7AA; color: #C2410C; }
+.garde-dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; flex-shrink: 0; }
+.garde-toggle.active .garde-dot { background: #C2410C; box-shadow: 0 0 0 3px rgba(194,65,12,.2); }
+/* locked button */
+.panel-btn.locked { background: #f3f4f6; color: #bbb; cursor: not-allowed; border: 1.5px dashed #e5e7eb; }
+/* profile modal */
+.profile-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.profile-modal { background: #fff; border-radius: 18px; padding: 32px 28px; width: 100%; max-width: 420px; box-shadow: 0 8px 40px rgba(0,0,0,0.15); }
+.role-card { border: 2px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: all .15s; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; }
+.role-card:hover { border-color: var(--green); background: #f0faf4; }
+.role-card.selected { border-color: var(--green); background: #f0faf4; }
+.role-card-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.year-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.year-chip { padding: 6px 14px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; color: #555; }
+.year-chip.selected { border-color: #2563EB; background: #EFF6FF; color: #2563EB; }
+.logout-btn:hover { color: var(--red); background: var(--red-light); }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── TOP BAR ── */
+.topbar {
+  background: #fff; border-bottom: 1px solid var(--border);
+  padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 14px; flex-shrink: 0;
+}
+.topbar-title { font-size: 15px; font-weight: 700; flex: 1; }
+.topbar-sub { font-size: 12px; color: #999; }
+.search-box {
+  display: flex; align-items: center; gap: 8px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; width: 220px;
+}
+.search-box input { background: none; border: none; outline: none; font-size: 13px; width: 100%; color: #333; }
+.search-box input::placeholder { color: #bbb; }
+.topbar-btn {
+  background: var(--green); color: #fff; border: none; border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: background .15s;
+}
+.topbar-btn:hover { background: var(--green-dark); }
+.topbar-btn-sec {
+  background: #fff; color: #555; border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 12px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+}
+.topbar-btn-sec:hover { background: #f8f8f8; }
+.topbar-btn-sec.active { background: var(--green-light); color: var(--green); border-color: rgba(0,133,63,0.2); }
+
+/* ── TABS ── */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: #fff; padding: 0 24px; flex-shrink: 0; }
+.tab {
+  padding: 12px 16px; font-size: 13px; font-weight: 500; color: #888; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all .15s; display: flex; align-items: center; gap: 7px;
+  border-top: none; border-left: none; border-right: none; background: none;
+}
+.tab:hover { color: #333; }
+.tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+.tab .tab-count { background: var(--red-light); color: var(--red); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 20px; }
+.tab.active .tab-count { background: var(--green-light); color: var(--green); }
+
+/* ── FILTERS ── */
+.filters { display: flex; gap: 8px; padding: 14px 24px 10px; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
+.filter-btn {
+  padding: 6px 14px; border-radius: 20px; font-size: 12.5px; font-weight: 500;
+  border: 1.5px solid var(--border); background: #fff; cursor: pointer; color: #555;
+  transition: all .15s; display: flex; align-items: center; gap: 6px;
+}
+.filter-btn:hover { border-color: #aaa; }
+.filter-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+.filter-btn .cnt { font-size: 11px; opacity: .8; }
+.filters-right { margin-left: auto; display: flex; gap: 6px; }
+.view-toggle { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.view-btn { padding: 5px 9px; background: #fff; border: none; cursor: pointer; color: #aaa; transition: all .12s; }
+.view-btn:hover { color: #555; }
+.view-btn.active { background: var(--green-light); color: var(--green); }
+
+/* ── CONTENT ── */
+.content { flex: 1; overflow-y: auto; padding: 10px 24px 24px; }
+
+/* ── STATS ROW ── */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.stat-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 16px; }
+.stat-value { font-size: 22px; font-weight: 800; line-height: 1; }
+.stat-label { font-size: 11px; color: #999; margin-top: 3px; }
+
+/* ── GRID VIEW ── */
+.beds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+
+.bed-card {
+  background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px;
+  cursor: pointer; transition: all .18s; position: relative; overflow: hidden;
+}
+.bed-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: #ccc; transform: translateY(-1px); }
+.bed-card.empty { border-style: dashed; background: #fafafa; cursor: default; }
+.bed-card.empty:hover { transform: none; box-shadow: none; }
+.bed-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+.bed-num-badge { font-size: 11px; font-weight: 700; color: #aaa; background: #f2f3f4; padding: 2px 8px; border-radius: 6px; }
+.day-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.day-badge.fresh { background: var(--green-light); color: var(--green); }
+.day-badge.mid { background: var(--amber-light); color: var(--amber); }
+.day-badge.old { background: var(--red-light); color: var(--red); }
+.patient-name { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+.patient-diag { font-size: 12px; color: #777; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bed-card-footer { display: flex; align-items: center; justify-content: space-between; }
+.status-tag { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: flex; align-items: center; gap: 4px; }
+.status-tag.critique { background: var(--red-light); color: var(--red); }
+.status-tag.modere { background: var(--amber-light); color: var(--amber); }
+.status-tag.stable { background: var(--green-light); color: var(--green); }
+.alerts-icons { display: flex; gap: 4px; }
+.alert-icon { font-size: 13px; }
+.allergy-strip { background: var(--red-light); border-top: 1px solid rgba(217,43,53,.15); margin: 10px -14px -14px; padding: 5px 14px; font-size: 11px; color: var(--red); font-weight: 600; display: flex; align-items: center; gap: 5px; }
+.bed-empty-label { text-align: center; color: #ccc; font-size: 12px; padding: 16px 0; }
+
+/* ── LIST VIEW ── */
+.beds-list { display: flex; flex-direction: column; gap: 6px; }
+.list-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 14px; cursor: pointer; transition: all .15s;
+}
+.list-card:hover { border-color: #ccc; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+.list-bed { font-size: 12px; font-weight: 700; color: #aaa; background: #f2f3f4; padding: 4px 10px; border-radius: 7px; flex-shrink: 0; min-width: 50px; text-align: center; }
+.list-left-bar { width: 3px; height: 38px; border-radius: 2px; flex-shrink: 0; }
+.list-left-bar.critique { background: var(--red); }
+.list-left-bar.modere { background: var(--amber); }
+.list-left-bar.stable { background: var(--green); }
+.list-info { flex: 1; min-width: 0; }
+.list-name { font-size: 14px; font-weight: 700; }
+.list-diag { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ── PATIENT PANEL (slide-in) ── */
+.patient-panel {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 440px;
+  background: #fff; border-left: 1px solid var(--border); z-index: 100;
+  display: flex; flex-direction: column; transform: translateX(110%);
+  transition: transform .25s cubic-bezier(.23,1,.32,1);
+  box-shadow: -8px 0 32px rgba(0,0,0,.08);
+}
+.patient-panel.open { transform: translateX(0); }
+.panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.18); z-index: 99; display: none; }
+.panel-overlay.open { display: block; }
+.panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.panel-close { background: none; border: none; color: #aaa; cursor: pointer; padding: 4px; border-radius: 6px; font-size: 18px; }
+.panel-close:hover { color: #333; background: #f3f4f6; }
+.panel-patient-name { font-size: 16px; font-weight: 700; flex: 1; }
+.panel-bed { font-size: 12px; color: #999; background: #f2f3f4; padding: 3px 9px; border-radius: 6px; }
+.allergy-banner { background: var(--red-light); border-bottom: 1px solid rgba(217,43,53,.15); padding: 10px 20px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--red); font-weight: 600; }
+.panel-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 20px; flex-shrink: 0; }
+.panel-tab { padding: 10px 12px; font-size: 12.5px; font-weight: 500; color: #888; cursor: pointer; border-bottom: 2px solid transparent; transition: all .12s; border-top: none; border-left: none; border-right: none; background: none; }
+.panel-tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+.cpanel-tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: #888; cursor: pointer; border-bottom: 2px solid transparent; border-top: none; border-left: none; border-right: none; background: none; transition: all .12s; }
+.cpanel-tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+.panel-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.info-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid #f2f3f4; font-size: 13px; }
+.info-label { color: #999; font-size: 12px; }
+.info-val { font-weight: 500; text-align: right; max-width: 60%; }
+.panel-section-title { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #bbb; margin: 16px 0 8px; }
+.note-card { background: #f8f9fa; border-radius: 10px; padding: 12px; margin-bottom: 8px; border: 1px solid #eee; }
+.note-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--green); margin-bottom: 4px; }
+.note-text { font-size: 13px; color: #444; line-height: 1.6; }
+.note-date { font-size: 11px; color: #bbb; margin-top: 6px; }
+.vital-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.vital-item { background: #f8f9fa; border-radius: 9px; padding: 10px 12px; border: 1px solid #eee; }
+.vital-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+.vital-val { font-size: 17px; font-weight: 800; color: #222; }
+.vital-unit { font-size: 11px; color: #aaa; font-weight: 400; }
+.task-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f2f3f4; }
+.task-cb { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #ddd; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: all .12s; }
+.task-cb.done { background: var(--green); border-color: var(--green); color: white; font-size: 10px; }
+.task-text { font-size: 13px; flex: 1; }
+.task-text.done { text-decoration: line-through; color: #bbb; }
+.task-priority { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.task-priority.urgent { background: var(--red-light); color: var(--red); }
+.task-priority.high { background: var(--amber-light); color: var(--amber); }
+
+.panel-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; }
+.panel-btn { flex: 1; padding: 10px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all .15s; }
+.panel-btn.primary { background: var(--green); color: white; }
+.panel-btn.primary:hover { background: var(--green-dark); }
+.panel-btn.secondary { background: #f3f4f6; color: #555; }
+.panel-btn.secondary:hover { background: #eee; }
+.panel-btn.danger { background: var(--red-light); color: var(--red); }
+
+/* ── RELÈVE PANEL ── */
+.releve-panel {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 480px;
+  background: #fff; border-left: 1px solid var(--border); z-index: 100;
+  display: flex; flex-direction: column; transform: translateX(110%);
+  transition: transform .25s cubic-bezier(.23,1,.32,1);
+  box-shadow: -8px 0 32px rgba(0,0,0,.08);
+}
+.releve-panel.open { transform: translateX(0); }
+.releve-content { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.releve-group { margin-bottom: 16px; }
+.releve-group-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.releve-group-title.critique { background: var(--red-light); color: var(--red); }
+.releve-group-title.modere { background: var(--amber-light); color: var(--amber); }
+.releve-group-title.stable { background: var(--green-light); color: var(--green); }
+.releve-row { border-left: 3px solid; border-radius: 0 8px 8px 0; padding: 8px 12px; margin-bottom: 6px; font-size: 13px; line-height: 1.6; }
+.releve-row.critique { border-color: var(--red); background: rgba(217,43,53,.04); }
+.releve-row.modere { border-color: var(--amber); background: rgba(200,122,0,.04); }
+.releve-row.stable { border-color: var(--green); background: rgba(0,133,63,.04); }
+.releve-row strong { font-weight: 700; }
+.releve-actions { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.releve-btn { padding: 11px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all .15s; }
+.releve-btn.primary { background: var(--green); color: white; }
+.releve-btn.primary:hover { background: var(--green-dark); }
+.releve-btn.outline { background: #fff; color: #555; border: 1.5px solid var(--border); }
+.releve-btn.outline:hover { background: #f8f8f8; }
+.releve-btn.generate { background: #f3f4f6; color: #333; }
+.releve-btn.generate:hover { background: #eee; }
+.releve-timestamp { font-size: 11px; color: #bbb; text-align: center; padding: 6px; }
+.copy-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1a1a2e; color: white; padding: 10px 20px; border-radius: 100px;
+  font-size: 13px; font-weight: 500; z-index: 200; opacity: 0; pointer-events: none;
+  transition: opacity .25s;
+}
+.copy-toast.show { opacity: 1; }
+
+/* ── CHAT ── */
+.chat-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.chat-channels { display: flex; gap: 0; border-bottom: 2px solid var(--border); background: #fff; flex-shrink: 0; }
+.chat-ch-btn { flex: 1; padding: 10px 4px 9px; border: none; background: transparent; font-size: 12px; font-weight: 600; color: #aaa; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; position: relative; }
+.chat-ch-btn.active { color: var(--green); border-bottom-color: var(--green); }
+.chat-ch-btn.ch-alertes.active { color: #DC2626; border-bottom-color: #DC2626; }
+.chat-ch-btn.ch-releve.active  { color: #2563EB; border-bottom-color: #2563EB; }
+.ch-badge { background: #DC2626; color: #fff; border-radius: 99px; font-size: 10px; padding: 1px 5px; min-width: 16px; text-align: center; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }
+.chat-msg { max-width: 76%; }
+.chat-msg.me { align-self: flex-end; }
+.chat-sender { font-size: 11px; font-weight: 600; color: #999; margin-bottom: 3px; }
+.chat-bubble { padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
+.chat-msg.other .chat-bubble { background: #fff; border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+.chat-msg.me .chat-bubble { background: var(--green); color: white; border-bottom-right-radius: 3px; }
+.chat-msg.system .chat-bubble { background: #FEF2F2; color: #DC2626; border-radius: 8px; font-size: 12px; border: 1px solid #FECACA; }
+.chat-msg.system.releve .chat-bubble { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
+.chat-patient-tag { display: inline-flex; align-items: center; gap: 4px; background: #F0FAF4; border: 1px solid #BBF7D0; color: #065F46; border-radius: 6px; font-size: 11px; font-weight: 600; padding: 2px 7px; margin-bottom: 5px; cursor: pointer; }
+.chat-patient-tag:hover { background: #D1FAE5; }
+.chat-meta { font-size: 11px; color: #bbb; margin-top: 3px; }
+.chat-msg.me .chat-meta { text-align: right; }
+.chat-input-area { padding: 10px 16px 12px; border-top: 1px solid var(--border); background: #fff; flex-shrink: 0; }
+.chat-input-top { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.chat-input-ch { font-size: 11px; font-weight: 700; border: 1.5px solid var(--border); border-radius: 7px; padding: 5px 8px; color: #555; cursor: pointer; background: #fff; outline: none; }
+.chat-input-patient { font-size: 11px; border: 1.5px solid var(--border); border-radius: 7px; padding: 5px 8px; color: #555; cursor: pointer; background: #fff; outline: none; flex: 1; max-width: 200px; }
+.chat-input-bottom { display: flex; gap: 8px; align-items: flex-end; }
+.chat-input { flex: 1; border: 1.5px solid var(--border); border-radius: 10px; padding: 9px 13px; font-size: 13px; outline: none; resize: none; min-height: 40px; max-height: 90px; font-family: inherit; }
+.chat-input:focus { border-color: var(--green); }
+.chat-send { background: var(--green); color: white; border: none; border-radius: 9px; padding: 9px 15px; cursor: pointer; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.chat-send:hover { background: var(--green-dark); }
+
+/* ── SAVE INDICATOR ── */
+#saveIndicator { position:fixed; bottom:72px; right:16px; background:#1e293b; color:#94a3b8; font-size:11px; font-weight:600; padding:6px 12px; border-radius:8px; display:flex; align-items:center; gap:6px; opacity:0; transition:opacity .3s; z-index:8888; pointer-events:none; }
+#saveIndicator.show { opacity:1; }
+#saveIndicator.saving { color:#fbbf24; }
+#saveIndicator.saved  { color:#34d399; }
+/* reset btn */
+.reset-btn { display:flex; align-items:center; gap:5px; width:100%; margin-top:6px; padding:7px 10px; border-radius:8px; border:1.5px dashed #e5e7eb; background:none; font-size:11px; font-weight:600; color:#dc2626; cursor:pointer; }
+.reset-btn:hover { background:#fef2f2; }
+/* ── JOURNAL VIEW ── */
+.journal-view { padding: 4px 0; }
+.journal-item { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid #f2f3f4; }
+.journal-time { font-size: 12px; color: #aaa; flex-shrink: 0; width: 50px; padding-top: 2px; }
+.journal-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.journal-dot.admission { background: var(--green); }
+.journal-dot.alert { background: var(--red); }
+.journal-dot.note { background: var(--blue); }
+.journal-dot.releve { background: var(--amber); }
+.journal-text { font-size: 13px; color: #444; line-height: 1.5; }
+.journal-text strong { color: #1a1a2e; font-weight: 600; }
+
+/* ── EMPTY STATE ── */
+.empty-state { text-align: center; padding: 60px 20px; color: #bbb; }
+.empty-icon { font-size: 3rem; margin-bottom: 12px; }
+.empty-title { font-size: 15px; font-weight: 600; color: #888; margin-bottom: 6px; }
+.empty-sub { font-size: 13px; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#00853F"/>
+      <polyline points="4,16 9,16 12,8 16,24 20,12 23,16 28,16" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="logo-text">PulseBoard</span>
+  </div>
+
+  <div class="sidebar-section">Navigation</div>
+  <button class="nav-item active" onclick="setView('services')">
+    <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+    Services
+    <span class="badge-dot"></span>
+  </button>
+  <button class="nav-item" onclick="setView('journal')">
+    <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+    Journal de garde
+  </button>
+  <button class="nav-item" onclick="setView('messagerie')">
+    <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+    Messagerie
+    <span class="count-badge">3</span>
+  </button>
+  <button class="nav-item" onclick="setView('profile')">
+    <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+    Profil
+  </button>
+
+  <div class="sidebar-section" style="margin-top:10px">Mes services</div>
+  <div class="sidebar-services">
+    <div class="service-item active" onclick="selectService(0)">
+      <div class="service-dot" style="background:#D92B35"></div>
+      <div class="service-info">
+        <div class="service-name">Cardiologie</div>
+        <div class="service-sub">CHU de Fann · 24 lits</div>
+      </div>
+      <span class="service-alert">2🚨</span>
+    </div>
+    <div class="service-item" onclick="selectService(1)">
+      <div class="service-dot" style="background:#c87a00"></div>
+      <div class="service-info">
+        <div class="service-name">Neurologie</div>
+        <div class="service-sub">CHU Le Dantec · 20 lits</div>
+      </div>
+    </div>
+    <div class="service-item" onclick="selectService(2)">
+      <div class="service-dot" style="background:#00853F"></div>
+      <div class="service-info">
+        <div class="service-name">Médecine Interne</div>
+        <div class="service-sub">H. Principal · 23 lits</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-footer" id="sidebarFooter">
+    <div class="user-row">
+      <div class="avatar" id="userAvatar">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="user-name" id="userName">—</div>
+        <div id="userRoleBadge"></div>
+      </div>
+      <button class="logout-btn" title="Changer de profil" onclick="openProfileModal()">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </button>
+    </div>
+    <div id="gardeToggleWrap" style="display:none">
+      <button class="garde-toggle" id="gardeToggleBtn" onclick="toggleGarde()">
+        <span class="garde-dot"></span>
+        <span id="gardeToggleLabel">Activer mode garde</span>
+      </button>
+    </div>
+    <button class="reset-btn" onclick="confirmResetData()">
+      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+      Réinitialiser les données
+    </button>
+  </div>
+  <div id="saveIndicator">
+    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    <span id="saveIndicatorText">Sauvegardé</span>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main" id="mainArea">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="topbarTitle">Cardiologie</div>
+      <div class="topbar-sub" id="topbarSub">CHU de Fann · 24 lits</div>
+    </div>
+    <div class="search-box" id="searchBox">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#bbb" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" placeholder="Chercher un patient, lit..." id="searchInput" oninput="filterPatients()"/>
+    </div>
+    <button class="topbar-btn-sec" onclick="toggleReleve()" id="releveBtn">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Relève
+    </button>
+    <button class="topbar-btn" onclick="openAdmit()">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+      Admettre
+    </button>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs" id="tabsBar">
+    <button class="tab active" onclick="setTab('lits', this)">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      Lits <span class="tab-count" id="tabCountLits">12</span>
+    </button>
+    <button class="tab" onclick="setTab('releve_tab', this)">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Relève
+    </button>
+    <button class="tab" onclick="setTab('consult', this)">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      Consultations <span class="tab-count" id="tabCountConsult" style="background:var(--amber-light);color:var(--amber)">4</span>
+    </button>
+    <button class="tab" id="tabEntrants" onclick="setTab('entrants', this)" style="display:none">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+      Entrants <span class="tab-count" id="tabCountEntrants" style="background:#fee2e2;color:#dc2626">0</span>
+    </button>
+    <button class="tab" onclick="setTab('chat', this)">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      Chat équipe <span class="tab-count" style="background:var(--blue-light);color:var(--blue)">3</span>
+    </button>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters" id="filtersBar">
+    <button class="filter-btn active" onclick="setFilter('tous', this)">Tous <span class="cnt" id="cntTous">12</span></button>
+    <button class="filter-btn" onclick="setFilter('critique', this)">🔴 Critiques <span class="cnt" id="cntCrit">2</span></button>
+    <button class="filter-btn" onclick="setFilter('modere', this)">🟡 Modérés <span class="cnt" id="cntMod">4</span></button>
+    <button class="filter-btn" onclick="setFilter('stable', this)">🟢 Stables <span class="cnt" id="cntStab">6</span></button>
+    <button class="filter-btn" onclick="setFilter('sortie', this)">🚪 Sortie prévue <span class="cnt" id="cntSortie">2</span></button>
+    <div class="filters-right">
+      <div class="view-toggle">
+        <button class="view-btn active" id="viewGrid" onclick="setViewMode('grid')" title="Grille">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        </button>
+        <button class="view-btn" id="viewList" onclick="setViewMode('list')" title="Liste">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT AREA -->
+  <div class="content" id="contentArea">
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:var(--green-light);font-size:18px">🛏️</div>
+        <div class="stat-value">12</div><div class="stat-label">Patients actifs</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:var(--red-light);font-size:18px">🚨</div>
+        <div class="stat-value" style="color:var(--red)">2</div><div class="stat-label">Critiques</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:var(--amber-light);font-size:18px">⚠️</div>
+        <div class="stat-value" style="color:var(--amber)">3</div><div class="stat-label">Alertes actives</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:var(--blue-light);font-size:18px">🚪</div>
+        <div class="stat-value" style="color:var(--blue)">2</div><div class="stat-label">Sorties prévues</div>
+      </div>
+    </div>
+    <!-- Patients grid/list injected here by JS -->
+    <div id="patientsContainer"></div>
+    <!-- Chat view -->
+    <div id="chatView" style="display:none" class="chat-view">
+      <!-- Canaux -->
+      <div class="chat-channels">
+        <button class="chat-ch-btn ch-alertes active" onclick="switchChannel('alertes',this)">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Alertes <span class="ch-badge" id="badgeAlertes">2</span>
+        </button>
+        <button class="chat-ch-btn ch-releve" onclick="switchChannel('releve',this)">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Relève
+        </button>
+        <button class="chat-ch-btn ch-equipe" onclick="switchChannel('equipe',this)">
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          Équipe
+        </button>
+      </div>
+      <!-- Messages -->
+      <div class="chat-messages" id="chatMessages"></div>
+      <!-- Zone de saisie -->
+      <div class="chat-input-area">
+        <div class="chat-input-top">
+          <select class="chat-input-ch" id="sendChannel">
+            <option value="alertes">Alertes</option>
+            <option value="releve">Relève</option>
+            <option value="equipe" selected>Équipe</option>
+          </select>
+          <select class="chat-input-patient" id="sendPatient">
+            <option value="">— Patient (optionnel)</option>
+          </select>
+        </div>
+        <div class="chat-input-bottom">
+          <textarea class="chat-input" placeholder="Écrire un message..." id="chatInput" rows="1" onkeydown="handleChatKey(event)"></textarea>
+          <button class="chat-send" onclick="sendMessage()">Envoyer</button>
+        </div>
+      </div>
+    </div>
+    <!-- Journal view -->
+    <div id="journalView" style="display:none" class="journal-view"></div>
+    <!-- Consult view -->
+    <div id="consultView" style="display:none"></div>
+    <!-- Entrants view -->
+    <div id="entrantsView" style="display:none"></div>
+  </div>
+
+</div>
+
+<!-- PATIENT DETAIL PANEL -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+<div class="patient-panel" id="patientPanel">
+  <div class="panel-header">
+    <button class="panel-close" onclick="closePanel()">✕</button>
+    <div>
+      <div class="panel-patient-name" id="panelName">-</div>
+      <div style="font-size:12px;color:#999;margin-top:2px" id="panelDiag">-</div>
+    </div>
+    <span class="panel-bed" id="panelBed">-</span>
+    <div id="panelStatus"></div>
+  </div>
+  <div id="allergyBanner" class="allergy-banner" style="display:none">
+    🚨 <strong>ALLERGIE CONNUE :</strong> <span id="allergyText"></span>
+  </div>
+  <div class="panel-tabs">
+    <button class="panel-tab active" onclick="setPanelTab('suivi', this)">Suivi</button>
+    <button class="panel-tab" onclick="setPanelTab('vitaux', this)">Constantes</button>
+    <button class="panel-tab" onclick="setPanelTab('taches', this)">Tâches</button>
+    <button class="panel-tab" onclick="setPanelTab('notes', this)">Notes DAR</button>
+  </div>
+  <div class="panel-content" id="panelContent"></div>
+  <div class="panel-footer" style="flex-wrap:wrap;gap:8px" id="panelFooter">
+    <button class="panel-btn secondary" onclick="closePanel()" style="flex:1 1 calc(50% - 4px)">Fermer</button>
+    <button class="panel-btn" id="btnRefer" style="flex:1 1 calc(50% - 4px);background:#EFF6FF;color:#2563EB;border:1.5px solid #BFDBFE">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M13 5H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-8"/><path d="M15 3h6m0 0v6m0-6L10 14"/></svg>
+      Référer
+    </button>
+    <button class="panel-btn danger" id="btnSortie" style="flex:1 1 calc(50% - 4px)">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M17 16l4-4m0 0l-4-4m4 4H7"/><path d="M3 12V7a2 2 0 012-2h6"/></svg>
+      Sortie
+    </button>
+    <button class="panel-btn primary" onclick="openModifierModal()" style="flex:1 1 calc(50% - 4px)">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Modifier
+    </button>
+  </div>
+</div>
+
+<!-- CONSULTATION DOSSIER PANEL -->
+<div class="panel-overlay" id="consultPanelOverlay" onclick="closeConsultPanel()"></div>
+<div class="patient-panel" id="consultPanel">
+  <div class="panel-header" id="consultPanelHeader"></div>
+  <div class="panel-tabs" id="consultPanelTabs" style="border-bottom:1px solid var(--border)"></div>
+  <div class="panel-content" id="consultPanelBody"></div>
+  <div class="panel-footer" id="consultPanelFooter" style="display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--border)"></div>
+</div>
+
+<!-- RELÈVE SIDE PANEL -->
+<div class="releve-panel" id="relevePanel">
+  <div class="panel-header">
+    <button class="panel-close" onclick="toggleReleve()">✕</button>
+    <div>
+      <div class="panel-patient-name">Relève du service</div>
+      <div style="font-size:12px;color:#999" id="releveTime"></div>
+    </div>
+    <button class="topbar-btn" onclick="generateReleve()" style="padding:6px 12px;font-size:12px">
+      ↻ Générer
+    </button>
+  </div>
+  <div class="releve-content" id="releveContent">
+    <div class="empty-state">
+      <div class="empty-icon">📄</div>
+      <div class="empty-title">Aucune relève générée</div>
+      <div class="empty-sub">Cliquez sur "Générer" pour créer la relève automatique groupée par priorité.</div>
+    </div>
+  </div>
+  <div class="releve-actions">
+    <button class="releve-btn primary" onclick="copyReleve()">📋 Copier pour WhatsApp</button>
+    <button class="releve-btn outline" onclick="exportPDF()">📑 Export PDF médico-légal</button>
+    <div class="releve-timestamp" id="releveTs"></div>
+  </div>
+</div>
+
+<div class="copy-toast" id="copyToast">✅ Copié — prêt pour WhatsApp</div>
+
+<script>
+// ──────────────────────────────────────────────
+// DATA
+// ──────────────────────────────────────────────
+const SERVICES = [
+  { id: 0, name: 'Cardiologie', hospital: 'CHU de Fann', beds: 24, color: '#D92B35' },
+  { id: 1, name: 'Neurologie', hospital: 'CHU Aristide Le Dantec', beds: 20, color: '#c87a00' },
+  { id: 2, name: 'Médecine Interne', hospital: 'Hôpital Principal de Dakar', beds: 23, color: '#00853F' },
+];
+
+let ALL_PATIENTS = [
+  {
+    id: 1, bed: 1, firstName: 'Amadou', lastName: 'Diallo', age: 62, gender: 'M',
+    diagnosis: 'STEMI antérieur — angioplastie J-2', status: 'critique', days: 2,
+    allergy: 'Héparine',
+    vitals: { bp: '145/90', hr: '88', spo2: '95%', temp: '37.8°C', rr: '18' },
+    notes: [{ type: 'DAR', text: 'D: Douleur thoracique persistante 4/10 malgré morphine. A: Syndrome coronarien instable post-angioplastie. R: Maintenir double antiagrégation, monitoring scope continu, bilan cardio demain matin.', date: '21/06 08:30' }],
+    tasks: [{ text: 'ECG 12h', priority: 'urgent', done: false }, { text: 'Bilan lipidique J3', priority: 'high', done: false }, { text: 'Consultation cardiologie', priority: 'high', done: true }],
+    exits: false, dps: true,
+    antecedents: 'HTA, Diabète type 2, tabagisme 20 PA',
+    treatment: 'Aspirine 100mg, Clopidogrel 75mg, HBPM, Statine',
+    bloodType: 'O+', emergency_contact: 'Épouse — +221 77 432 10 56',
+  },
+  {
+    id: 2, bed: 2, firstName: 'Mariama', lastName: 'Sow', age: 45, gender: 'F',
+    diagnosis: 'FA rapide — cardioversion électrique planifiée', status: 'critique', days: 1,
+    allergy: null,
+    vitals: { bp: '120/80', hr: '142', spo2: '97%', temp: '37.1°C', rr: '16' },
+    notes: [{ type: 'SOAP', text: 'S: Palpitations et dyspnée depuis 48h. O: FC 142 irrégulière. ECG: FA à 140/min. A: FA rapide mal tolérée hémodynamiquement. P: Cardioversion électrique programmée demain 8h. Jeûne strict.', date: '21/06 07:15' }],
+    tasks: [{ text: 'Consentement cardioversion', priority: 'urgent', done: false }, { text: 'Bilan pré-op complet', priority: 'urgent', done: true }],
+    exits: false, dps: true,
+    antecedents: 'Valvulopathie mitrale connue',
+    treatment: 'Amiodarone IV, Héparine IVSE',
+    bloodType: 'A+', emergency_contact: 'Mari — +221 76 581 23 40',
+  },
+  {
+    id: 3, bed: 3, firstName: 'Oumar', lastName: 'Ndiaye', age: 58, gender: 'M',
+    diagnosis: 'Insuffisance cardiaque gauche décompensée', status: 'modere', days: 5,
+    allergy: 'Pénicilline',
+    vitals: { bp: '135/85', hr: '76', spo2: '94%', temp: '37.0°C', rr: '22' },
+    notes: [{ type: 'DAR', text: 'D: Amélioration clinique nette. Dyspnée de repos disparue. A: ICA décompensée, bonne réponse aux diurétiques. R: Continuer furosémide IV, ionogramme demain.', date: '21/06 09:00' }],
+    tasks: [{ text: 'Ionogramme matin', priority: 'high', done: false }, { text: 'Pesée quotidienne', priority: 'high', done: true }],
+    exits: false, dps: false,
+    antecedents: 'HTA, insuffisance cardiaque chronique FE 35%',
+    treatment: 'Furosémide 80mg IV, IEC, Bêtabloquant',
+  },
+  {
+    id: 4, bed: 4, firstName: 'Khadija', lastName: 'Gueye', age: 34, gender: 'F',
+    diagnosis: 'Péricardite aiguë virale', status: 'modere', days: 3,
+    allergy: null,
+    vitals: { bp: '110/70', hr: '82', spo2: '99%', temp: '38.2°C', rr: '16' },
+    notes: [],
+    tasks: [{ text: 'Echo cœur contrôle J5', priority: 'high', done: false }],
+    exits: false, dps: true,
+    antecedents: 'Aucun antécédent notable',
+    treatment: 'Ibuprofène 600mg x3/j, Colchicine 0.5mg x2/j',
+  },
+  {
+    id: 5, bed: 5, firstName: 'Ibrahima', lastName: 'Fall', age: 71, gender: 'M',
+    diagnosis: 'Angor instable — exploration coronaire', status: 'modere', days: 2,
+    allergy: 'Iode (produit de contraste)',
+    vitals: { bp: '160/95', hr: '68', spo2: '97%', temp: '36.9°C', rr: '15' },
+    notes: [],
+    tasks: [{ text: 'Test allergie iode avant coronaro', priority: 'urgent', done: false }, { text: 'Prémédication corticoïdes', priority: 'high', done: true }],
+    exits: false, dps: true,
+    antecedents: 'Diabète, HTA, insuffisance rénale chronique',
+    treatment: 'Aspirine, Bêtabloquant, Dérivés nitrés',
+  },
+  {
+    id: 6, bed: 6, firstName: 'Fatou', lastName: 'Diop', age: 52, gender: 'F',
+    diagnosis: 'HTA sévère — bilan d\'organes cible', status: 'stable', days: 1,
+    allergy: null,
+    vitals: { bp: '180/110', hr: '72', spo2: '98%', temp: '36.8°C', rr: '14' },
+    notes: [],
+    tasks: [{ text: 'Fond d\'œil', priority: 'high', done: false }, { text: 'Créatinine + micro-albuminurie', priority: 'high', done: true }],
+    exits: true, dps: true,
+    antecedents: 'HTA depuis 10 ans, traitée irrégulièrement',
+    treatment: 'Amlodipine 10mg, Perindopril 10mg, Furosémide 40mg',
+  },
+  {
+    id: 7, bed: 7, firstName: 'Moussa', lastName: 'Diagne', age: 66, gender: 'M',
+    diagnosis: 'Trouble du rythme — mise au point', status: 'stable', days: 4,
+    allergy: null,
+    vitals: { bp: '125/80', hr: '58', spo2: '98%', temp: '36.7°C', rr: '14' },
+    notes: [{ type: 'Libre', text: 'Patient coopérant. Holter 24h posé ce matin. Résultats attendus demain.', date: '21/06 10:00' }],
+    tasks: [{ text: 'Résultats Holter 24h', priority: 'high', done: false }],
+    exits: false, dps: true,
+    antecedents: 'Valve aortique bicuspide connue',
+    treatment: 'Surveillance, Holter en cours',
+  },
+  {
+    id: 8, bed: 8, firstName: 'Aminata', lastName: 'Ba', age: 41, gender: 'F',
+    diagnosis: 'Bilan pré-opératoire cardiaque', status: 'stable', days: 1,
+    allergy: null,
+    vitals: { bp: '118/75', hr: '64', spo2: '99%', temp: '36.6°C', rr: '13' },
+    notes: [],
+    tasks: [{ text: 'Echo cœur pré-op', priority: 'high', done: true }, { text: 'Avis anesthésie', priority: 'high', done: false }],
+    exits: true, dps: true,
+    antecedents: 'Prolapsus mitral',
+    treatment: 'Aucun traitement actuel',
+  },
+  {
+    id: 9, bed: 9, firstName: 'Serigne', lastName: 'Mbaye', age: 78, gender: 'M',
+    diagnosis: 'Insuffisance cardiaque chronique — suivi', status: 'stable', days: 8,
+    allergy: null,
+    vitals: { bp: '130/82', hr: '70', spo2: '96%', temp: '36.9°C', rr: '16' },
+    notes: [],
+    tasks: [{ text: 'Discussion retour domicile', priority: 'high', done: false }],
+    exits: false, dps: false,
+    antecedents: 'IC chronique, BPCO, AVC 2021',
+    treatment: 'Furosémide, IEC, Anticoagulant oral',
+  },
+  {
+    id: 10, bed: 10, firstName: 'Rokhaya', lastName: 'Diouf', age: 29, gender: 'F',
+    diagnosis: 'Cardiomyopathie du peripartum', status: 'modere', days: 6,
+    allergy: null,
+    vitals: { bp: '105/65', hr: '95', spo2: '97%', temp: '37.2°C', rr: '18' },
+    notes: [],
+    tasks: [{ text: 'Echo cardiaque contrôle', priority: 'high', done: false }, { text: 'Bilan BNP', priority: 'high', done: true }],
+    exits: false, dps: true,
+    antecedents: 'Accouchement il y a 3 semaines (J+21)',
+    treatment: 'Bêtabloquant, IEC, Diurétique',
+  },
+  {
+    id: 11, bed: 11, firstName: 'Lamine', lastName: 'Sarr', age: 55, gender: 'M',
+    diagnosis: 'Valvulopathie aortique — décision chirurgicale', status: 'stable', days: 3,
+    allergy: null,
+    vitals: { bp: '140/88', hr: '66', spo2: '97%', temp: '36.8°C', rr: '15' },
+    notes: [],
+    tasks: [{ text: 'Réunion équipe chirurgie cardiaque', priority: 'high', done: false }],
+    exits: false, dps: true,
+    antecedents: 'Rétrécissement aortique serré connu depuis 2022',
+    treatment: 'Surveillance clinique, pas de médicament actif',
+  },
+  {
+    id: 12, bed: 12, firstName: 'Astou', lastName: 'Niang', age: 48, gender: 'F',
+    diagnosis: 'Fibrillation auriculaire — contrôle de fréquence', status: 'stable', days: 2,
+    allergy: null,
+    vitals: { bp: '128/82', hr: '72', spo2: '98%', temp: '36.7°C', rr: '14' },
+    notes: [],
+    tasks: [{ text: 'INR de contrôle', priority: 'high', done: false }],
+    exits: false, dps: true,
+    antecedents: 'FA persistante depuis 2023, sous AVK',
+    treatment: 'Warfarine, Digoxine, Bêtabloquant',
+  },
+];
+
+// channel: 'alertes' | 'releve' | 'equipe'
+// patient: { id, name } | null
+let CHAT_MESSAGES = [
+  { type: 'system', channel: 'alertes', text: 'Admission : Amadou Diallo — Lit 1 — STEMI antérieur', time: '06:32', sender: 'Système', patient: { id: 'p1', name: 'Amadou Diallo' } },
+  { type: 'system', channel: 'alertes', text: 'DPS manquante — Oumar Ndiaye — Lit 3', time: '08:05', sender: 'Système', patient: { id: 'p3', name: 'Oumar Ndiaye' } },
+  { type: 'system', channel: 'alertes', text: 'Allergie iode confirmée — Ibrahima Fall — Lit 5 — avant coronarographie', time: '09:10', sender: 'Système', patient: { id: 'p5', name: 'Ibrahima Fall' } },
+  { type: 'system', channel: 'releve', text: 'Relève générée — 21/06/2026 08:00 — Dr. M. Ndiaye', time: '08:02', sender: 'Système', patient: null },
+  { type: 'other', channel: 'equipe', text: "Quelqu'un peut checker le scope du lit 2 ? FA à 140, patient agitée.", time: '07:18', sender: 'Dr. A. Sow', patient: { id: 'p2', name: 'Mariama Sow' } },
+  { type: 'me',    channel: 'equipe', text: "Je vais la voir maintenant. FC 142 à l'ECG, je prépare la fiche cardioversion.", time: '07:22', sender: 'Dr. M. Ndiaye', patient: { id: 'p2', name: 'Mariama Sow' } },
+  { type: 'other', channel: 'equipe', text: 'Parfait. Le bilan pré-op est dans les fichiers. Consentement à faire signer ce matin.', time: '07:25', sender: 'Dr. A. Sow', patient: null },
+  { type: 'other', channel: 'equipe', text: "Le lit 5 a une allergie iode confirmée — Pr. Bâ est au courant pour la coronaro ?", time: '09:10', sender: 'Inf. Mame Diarra', patient: { id: 'p5', name: 'Ibrahima Fall' } },
+  { type: 'me',    channel: 'equipe', text: 'Oui, prémédication corticoïdes en cours. Test allergie programmé avant.', time: '09:14', sender: 'Dr. M. Ndiaye', patient: { id: 'p5', name: 'Ibrahima Fall' } },
+];
+
+let JOURNAL_EVENTS = [
+  { time: '06:32', type: 'admission', text: '<strong>Admission</strong> — Amadou Diallo (Lit 1) — STEMI antérieur' },
+  { time: '07:15', type: 'alert', text: '<strong>Alerte</strong> — Mariama Sow (Lit 2) — FC > 130/min détectée sur scope' },
+  { time: '08:00', type: 'releve', text: '<strong>Relève générée</strong> par Dr. M. Ndiaye — exportée PDF + WhatsApp' },
+  { time: '08:05', type: 'alert', text: '<strong>Alerte DPS</strong> — Oumar Ndiaye (Lit 3) — Dossier patient non complété' },
+  { time: '08:30', type: 'note', text: '<strong>Note DAR</strong> — Amadou Diallo (Lit 1) — Douleur thoracique 4/10' },
+  { time: '09:00', type: 'note', text: '<strong>Observation</strong> — Oumar Ndiaye (Lit 3) — Amélioration clinique nette' },
+  { time: '09:10', type: 'alert', text: '<strong>⚠️ Allergie rappelée</strong> — Ibrahima Fall (Lit 5) — Allergie iode avant coronarographie' },
+  { time: '10:00', type: 'note', text: '<strong>Holter 24h</strong> posé — Moussa Diagne (Lit 7)' },
+  { time: '11:20', type: 'admission', text: '<strong>Sortie prévue</strong> — Fatou Diop (Lit 6) — Retour domicile après stabilisation HTA' },
+];
+
+let ENTRANTS = [];
+
+let CONSULTATIONS = [
+  { id: 'c1', patient: 'Abdoulaye Camara', age: 54, gender: 'M', motif: 'Douleur thoracique atypique', status: 'en_attente', time: '09:00', allergy: null, notes: [] },
+  { id: 'c2', patient: 'Ndéye Mbaye', age: 38, gender: 'F', motif: 'Palpitations récidivantes', status: 'en_attente', time: '10:30', allergy: 'Aspirine', notes: [] },
+  { id: 'c3', patient: 'Cheikh Diallo', age: 61, gender: 'M', motif: 'Bilan HTA résistante', status: 'vu', time: '08:00', allergy: null, notes: [{ type: 'SOAP', text: 'S: HTA mal contrôlée malgré triple thérapie.\nO: TA 175/105. FC 78. Fond œil : stade 2.\nA: HTA résistante probable. Bilan secondaire.\nP: Holter TA 24h, écho rénale, bilan biologique.', date: '06/07 08:45' }] },
+  { id: 'c4', patient: 'Awa Touré', age: 47, gender: 'F', motif: 'Suivi post-angioplastie', status: 'reporte', time: '11:00', allergy: null, notes: [] },
+];
+
+// Archive des consultations passées par patient (toutes dates)
+let CONSULT_ARCHIVE = [
+  { patient: 'Abdoulaye Camara', motif: 'Douleur précordiale', date: '14/05/2026', status: 'vu', service: 'Cardiologie', notes: [{ type: 'DAR', text: 'D: Douleur 5/10 à leffort. ECG normal. A: Angor fonctionnel probable. R: Test effort programmé.', date: '14/05 10:20' }] },
+  { patient: 'Abdoulaye Camara', motif: 'Résultats test effort', date: '02/06/2026', status: 'vu', service: 'Cardiologie', notes: [{ type: 'DAR', text: 'D: Test effort négatif. Pas de sus-décalage ST. A: Angor fonctionnel confirmé. R: Traitement médical optimisé.', date: '02/06 09:00' }] },
+  { patient: 'Ndéye Mbaye', motif: 'Palpitations intermittentes', date: '20/04/2026', status: 'vu', service: 'Cardiologie', notes: [{ type: 'SOAP', text: 'S: Episodes de palpitations 2-3x/semaine.\nO: ECG sinusal. Holter normal.\nA: Extrasystoles bénignes.\nP: Réévaluation si aggravation.', date: '20/04 14:00' }] },
+  { patient: 'Cheikh Diallo', motif: 'Suivi HTA', date: '10/03/2026', status: 'vu', service: 'Cardiologie', notes: [] },
+  { patient: 'Cheikh Diallo', motif: 'Contrôle tensionnel', date: '15/04/2026', status: 'vu', service: 'Cardiologie', notes: [] },
+];
+
+// ──────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────
+let currentService = 0;
+let currentFilter = 'tous';
+let currentTab = 'lits';
+let currentViewMode = 'grid';
+let currentPatient = null;
+let currentPanelTab = 'suivi';
+let releveGenerated = false;
+let releveText = '';
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadState();   // restore persisted data before any render
+  loadUser();
+  if (!CURRENT_USER) {
+    openProfileModal();
+  } else {
+    updateSidebarUser();
+  }
+  renderPatients();
+  initChatPatientSelect();
+  renderChat();
+  renderJournal();
+  renderConsult();
+  document.getElementById('releveTime').textContent = formatTime();
+});
+
+function formatTime() {
+  return new Date().toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' }) + ' — ' + new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ──────────────────────────────────────────────
+// SERVICE SELECTION
+// ──────────────────────────────────────────────
+function selectService(idx) {
+  currentService = idx;
+  document.querySelectorAll('.service-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  const s = SERVICES[idx];
+  document.getElementById('topbarTitle').textContent = s.name;
+  document.getElementById('topbarSub').textContent = s.hospital + ' · ' + s.beds + ' lits';
+  renderPatients();
+}
+
+// ──────────────────────────────────────────────
+// VIEW SWITCHING
+// ──────────────────────────────────────────────
+function setView(view) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  if (view === 'journal') {
+    setTab('journal_nav', null);
+    showJournalTab();
+  } else if (view === 'messagerie') {
+    setTab('chat', null);
+    switchToTab('chat');
+  }
+}
+
+function switchToTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  currentTab = tab;
+  updateContentVisibility();
+}
+
+function setTab(tab, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  currentTab = tab;
+  updateContentVisibility();
+}
+
+function showJournalTab() {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  currentTab = 'journal';
+  updateContentVisibility();
+}
+
+function updateContentVisibility() {
+  const showPats = ['lits', 'releve_tab'].includes(currentTab);
+  const showChat = currentTab === 'chat';
+  const showJournal = currentTab === 'journal' || currentTab === 'journal_nav';
+  const showConsult = currentTab === 'consult';
+  const showEntrants = currentTab === 'entrants';
+  const showReleve = currentTab === 'releve_tab';
+
+  document.getElementById('patientsContainer').style.display = showPats && !showReleve ? '' : 'none';
+  document.getElementById('chatView').style.display = showChat ? 'flex' : 'none';
+  document.getElementById('journalView').style.display = showJournal ? '' : 'none';
+  document.getElementById('consultView').style.display = showConsult ? '' : 'none';
+  document.getElementById('entrantsView').style.display = showEntrants ? '' : 'none';
+  document.getElementById('statsRow').style.display = showPats && !showReleve ? '' : 'none';
+  document.getElementById('filtersBar').style.display = showPats && !showReleve ? '' : 'none';
+  document.getElementById('searchBox').style.display = showPats ? '' : 'none';
+
+  if (showConsult) renderConsult();
+  if (showEntrants) renderEntrants();
+
+  if (showReleve) {
+    document.getElementById('patientsContainer').style.display = 'none';
+    document.getElementById('statsRow').style.display = 'none';
+    document.getElementById('filtersBar').style.display = 'none';
+    openReleveInline();
+  }
+}
+
+function openReleveInline() {
+  toggleReleve();
+}
+
+// ──────────────────────────────────────────────
+// FILTER
+// ──────────────────────────────────────────────
+function setFilter(filter, btn) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderPatients();
+}
+
+function filterPatients() {
+  renderPatients();
+}
+
+function getFilteredPatients() {
+  let pts = ALL_PATIENTS;
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  if (q) {
+    pts = pts.filter(p =>
+      (p.firstName + ' ' + p.lastName).toLowerCase().includes(q) ||
+      p.diagnosis.toLowerCase().includes(q) ||
+      ('lit ' + p.bed).includes(q)
+    );
+  }
+  if (currentFilter === 'critique') pts = pts.filter(p => p.status === 'critique');
+  else if (currentFilter === 'modere') pts = pts.filter(p => p.status === 'modere');
+  else if (currentFilter === 'stable') pts = pts.filter(p => p.status === 'stable');
+  else if (currentFilter === 'sortie') pts = pts.filter(p => p.exits);
+  return pts;
+}
+
+// ──────────────────────────────────────────────
+// VIEW MODE
+// ──────────────────────────────────────────────
+function setViewMode(mode) {
+  currentViewMode = mode;
+  document.getElementById('viewGrid').classList.toggle('active', mode === 'grid');
+  document.getElementById('viewList').classList.toggle('active', mode === 'list');
+  renderPatients();
+}
+
+// ──────────────────────────────────────────────
+// RENDER PATIENTS
+// ──────────────────────────────────────────────
+function renderPatients() {
+  const pts = getFilteredPatients();
+  const container = document.getElementById('patientsContainer');
+
+  // Update counts
+  const all = ALL_PATIENTS;
+  document.getElementById('cntTous').textContent = all.length;
+  document.getElementById('cntCrit').textContent = all.filter(p => p.status === 'critique').length;
+  document.getElementById('cntMod').textContent = all.filter(p => p.status === 'modere').length;
+  document.getElementById('cntStab').textContent = all.filter(p => p.status === 'stable').length;
+  document.getElementById('cntSortie').textContent = all.filter(p => p.exits).length;
+  document.getElementById('tabCountLits').textContent = all.length;
+
+  if (currentViewMode === 'grid') {
+    container.className = 'beds-grid';
+    container.innerHTML = pts.map(p => renderGridCard(p)).join('');
+    // Add empty beds up to 24
+    const shown = pts.length;
+    for (let i = shown; i < Math.min(24, shown + 3); i++) {
+      container.innerHTML += `<div class="bed-card empty"><div class="bed-num-badge" style="opacity:.4">Lit ${i + pts.length + 1}</div><div class="bed-empty-label">Lit disponible</div></div>`;
+    }
+  } else {
+    container.className = 'beds-list';
+    container.innerHTML = pts.map(p => renderListCard(p)).join('');
+  }
+}
+
+function dayClass(d) { return d >= 10 ? 'old' : d >= 5 ? 'mid' : 'fresh'; }
+function statusLabel(s) { return s === 'critique' ? '🔴 Critique' : s === 'modere' ? '🟡 Modéré' : '🟢 Stable'; }
+function alertIcons(p) {
+  let icons = '';
+  if (p.allergy) icons += '<span class="alert-icon" title="Allergie connue">🚨</span>';
+  if (!p.dps) icons += '<span class="alert-icon" title="DPS manquante">⚠️</span>';
+  if (p.exits) icons += '<span class="alert-icon" title="Sortie prévue">🚪</span>';
+  return icons;
+}
+
+function renderGridCard(p) {
+  return `
+  <div class="bed-card" onclick="openPatient(${p.id})">
+    <div class="bed-card-header">
+      <span class="bed-num-badge">Lit ${p.bed}</span>
+      <span class="day-badge ${dayClass(p.days)}">J+${p.days}</span>
+    </div>
+    <div class="patient-name">${p.firstName} ${p.lastName}</div>
+    <div class="patient-diag">${p.diagnosis}</div>
+    <div class="bed-card-footer">
+      <span class="status-tag ${p.status}">${statusLabel(p.status)}</span>
+      <div class="alerts-icons">${alertIcons(p)}</div>
+    </div>
+    ${p.allergy ? `<div class="allergy-strip">🚨 ${p.allergy}</div>` : ''}
+  </div>`;
+}
+
+function renderListCard(p) {
+  return `
+  <div class="list-card" onclick="openPatient(${p.id})">
+    <span class="list-bed">Lit ${p.bed}</span>
+    <div class="list-left-bar ${p.status}"></div>
+    <div class="list-info">
+      <div class="list-name">${p.firstName} ${p.lastName} <span style="font-size:11px;color:#aaa;font-weight:400">${p.age} ans</span></div>
+      <div class="list-diag">${p.diagnosis}</div>
+    </div>
+    <div class="list-right">
+      ${p.allergy ? '<span title="Allergie" style="font-size:14px">🚨</span>' : ''}
+      ${!p.dps ? '<span title="DPS manquante" style="font-size:14px">⚠️</span>' : ''}
+      ${p.exits ? '<span title="Sortie prévue" style="font-size:14px">🚪</span>' : ''}
+      <span class="day-badge ${dayClass(p.days)}">J+${p.days}</span>
+      <span class="status-tag ${p.status}" style="min-width:80px;text-align:center">${statusLabel(p.status)}</span>
+    </div>
+  </div>`;
+}
+
+// ──────────────────────────────────────────────
+// PATIENT PANEL
+// ──────────────────────────────────────────────
+function openPatient(id) {
+  currentPatient = ALL_PATIENTS.find(p => p.id === id);
+  if (!currentPatient) return;
+  const p = currentPatient;
+  document.getElementById('panelName').textContent = p.firstName + ' ' + p.lastName;
+  document.getElementById('panelDiag').textContent = p.diagnosis;
+  document.getElementById('panelBed').textContent = 'Lit ' + p.bed;
+  document.getElementById('panelStatus').innerHTML = `<span class="status-tag ${p.status}">${statusLabel(p.status)}</span>`;
+  const ab = document.getElementById('allergyBanner');
+  if (p.allergy) { ab.style.display = 'flex'; document.getElementById('allergyText').textContent = p.allergy; }
+  else { ab.style.display = 'none'; }
+  currentPanelTab = 'suivi';
+  document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel-tab')[0].classList.add('active');
+  renderPanelContent();
+  applyPanelPermissions();
+  document.getElementById('patientPanel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+}
+
+function applyPanelPermissions() {
+  const btnRefer  = document.getElementById('btnRefer');
+  const btnSortie = document.getElementById('btnSortie');
+  if (!btnRefer || !btnSortie) return;
+
+  if (canDo('refer')) {
+    btnRefer.className = 'panel-btn';
+    btnRefer.style.cssText = 'flex:1 1 calc(50% - 4px);background:#EFF6FF;color:#2563EB;border:1.5px solid #BFDBFE';
+    btnRefer.onclick = openReferModal;
+    btnRefer.title = '';
+  } else {
+    btnRefer.className = 'panel-btn locked';
+    btnRefer.style.cssText = 'flex:1 1 calc(50% - 4px)';
+    btnRefer.onclick = () => showToast('Référer : réservé au Résident / Chef de service', '#C2410C');
+    btnRefer.title = 'Accès Résident ou Chef de service';
+  }
+
+  if (canDo('sortie')) {
+    btnSortie.className = 'panel-btn danger';
+    btnSortie.style.cssText = 'flex:1 1 calc(50% - 4px)';
+    btnSortie.onclick = openSortieModal;
+    btnSortie.title = '';
+  } else {
+    btnSortie.className = 'panel-btn locked';
+    btnSortie.style.cssText = 'flex:1 1 calc(50% - 4px)';
+    btnSortie.onclick = () => showToast('Sortie : réservé au Résident / Chef de service', '#C2410C');
+    btnSortie.title = 'Accès Résident ou Chef de service';
+  }
+}
+
+function closePanel() {
+  document.getElementById('patientPanel').classList.remove('open');
+  document.getElementById('panelOverlay').classList.remove('open');
+}
+
+function setPanelTab(tab, btn) {
+  currentPanelTab = tab;
+  document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderPanelContent();
+}
+
+function renderPanelContent() {
+  const p = currentPatient;
+  const el = document.getElementById('panelContent');
+  if (currentPanelTab === 'suivi') {
+    el.innerHTML = `
+      <div class="panel-section-title">Informations générales</div>
+      <div class="info-row"><span class="info-label">Âge</span><span class="info-val">${p.age} ans</span></div>
+      <div class="info-row"><span class="info-label">Sexe</span><span class="info-val">${p.gender === 'M' ? 'Masculin' : 'Féminin'}</span></div>
+      <div class="info-row"><span class="info-label">Groupe sanguin</span><span class="info-val" style="font-weight:700;color:${p.bloodType?'#DC2626':'#aaa'}">${p.bloodType||'Non renseigné'}</span></div>
+      <div class="info-row"><span class="info-label">Admission</span><span class="info-val">J+${p.days} (il y a ${p.days} jour${p.days>1?'s':''})</span></div>
+      <div class="info-row"><span class="info-label">DPS</span><span class="info-val" style="color:${p.dps?'var(--green)':'var(--red)'}">${p.dps ? '✅ Complète' : '⚠️ Manquante'}</span></div>
+      ${p.exits ? `<div class="info-row"><span class="info-label">Sortie</span><span class="info-val" style="color:var(--blue)">🚪 Prévue aujourd'hui</span></div>` : ''}
+      ${p.emergency_contact ? `<div style="background:#FFF7ED;border-radius:8px;padding:10px 12px;margin:10px 0;font-size:13px"><span style="font-weight:600;color:#92400e">Contact urgence : </span><span style="color:#555">${p.emergency_contact}</span></div>` : ''}
+      <div class="panel-section-title">Antécédents</div>
+      <div style="font-size:13px;color:#555;line-height:1.6;padding:8px 0">${p.antecedents}</div>
+      <div class="panel-section-title">Traitement habituel</div>
+      <div style="font-size:13px;color:#555;line-height:1.6;padding:8px 0">${p.treatment}</div>
+    `;
+  } else if (currentPanelTab === 'vitaux') {
+    const v = p.vitals;
+    if (!p.vitalsHistory) p.vitalsHistory = [];
+    const vitalAlert = (val, warn, danger, unit='') => {
+      const n = parseFloat(val);
+      if (isNaN(n)) return '';
+      if (danger && (n <= danger[0] || n >= danger[1])) return 'color:#DC2626;font-weight:700';
+      if (warn && (n <= warn[0] || n >= warn[1])) return 'color:#F59E0B;font-weight:700';
+      return 'color:#00853F;font-weight:700';
+    };
+    const bpSys = parseFloat((v.bp||'').split('/')[0]);
+    const bpStyle = isNaN(bpSys) ? '' : bpSys >= 180 ? 'color:#DC2626;font-weight:700' : bpSys >= 140 ? 'color:#F59E0B;font-weight:700' : 'color:#00853F;font-weight:700';
+    const hrN = parseFloat(v.hr); const hrStyle = isNaN(hrN) ? '' : (hrN < 50 || hrN > 130) ? 'color:#DC2626;font-weight:700' : (hrN < 60 || hrN > 100) ? 'color:#F59E0B;font-weight:700' : 'color:#00853F;font-weight:700';
+    const spo2N = parseFloat(v.spo2); const spo2Style = isNaN(spo2N) ? '' : spo2N < 90 ? 'color:#DC2626;font-weight:700' : spo2N < 94 ? 'color:#F59E0B;font-weight:700' : 'color:#00853F;font-weight:700';
+    const tempN = parseFloat(v.temp); const tempStyle = isNaN(tempN) ? '' : tempN >= 39 ? 'color:#DC2626;font-weight:700' : tempN >= 38 ? 'color:#F59E0B;font-weight:700' : 'color:#00853F;font-weight:700';
+    const rrN = parseFloat(v.rr); const rrStyle = isNaN(rrN) ? '' : (rrN < 10 || rrN > 30) ? 'color:#DC2626;font-weight:700' : (rrN > 20) ? 'color:#F59E0B;font-weight:700' : 'color:#00853F;font-weight:700';
+    el.innerHTML = `
+      <div class="panel-section-title">Dernières constantes</div>
+      <div class="vital-grid">
+        <div class="vital-item"><div class="vital-label">Tension artérielle</div><div class="vital-val" style="${bpStyle}">${v.bp||'—'} <span class="vital-unit" style="font-weight:400;color:#aaa">mmHg</span></div></div>
+        <div class="vital-item"><div class="vital-label">Fréquence cardiaque</div><div class="vital-val" style="${hrStyle}">${v.hr||'—'} <span class="vital-unit" style="font-weight:400;color:#aaa">bpm</span></div></div>
+        <div class="vital-item"><div class="vital-label">SpO₂</div><div class="vital-val" style="${spo2Style}">${v.spo2||'—'}</div></div>
+        <div class="vital-item"><div class="vital-label">Température</div><div class="vital-val" style="${tempStyle}">${v.temp||'—'}</div></div>
+        <div class="vital-item"><div class="vital-label">FR</div><div class="vital-val" style="${rrStyle}">${v.rr||'—'} <span class="vital-unit" style="font-weight:400;color:#aaa">/min</span></div></div>
+      </div>
+      <div style="font-size:11px;color:#aaa;margin:8px 0 14px;display:flex;gap:16px">
+        <span style="color:#00853F">● Normal</span><span style="color:#F59E0B">● Attention</span><span style="color:#DC2626">● Critique</span>
+      </div>
+      ${p.vitalsHistory.length ? `
+        <div class="panel-section-title">Historique</div>
+        ${p.vitalsHistory.slice().reverse().map(h => `
+          <div style="background:#f8f9fa;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;color:#555">
+            <div style="font-weight:600;color:#333;margin-bottom:4px">${h.date}</div>
+            TA ${h.bp} · FC ${h.hr} · SpO₂ ${h.spo2} · T° ${h.temp} · FR ${h.rr}
+          </div>
+        `).join('')}
+      ` : ''}
+      <button onclick="openVitauxModal()" style="margin-top:12px;width:100%;padding:10px;background:var(--green-light);color:var(--green);border:1.5px dashed rgba(0,133,63,0.3);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">+ Enregistrer nouvelles constantes</button>
+    `;
+  } else if (currentPanelTab === 'taches') {
+    el.innerHTML = `
+      <div class="panel-section-title">Tâches</div>
+      ${p.tasks.map((t, i) => `
+        <div class="task-item">
+          <div class="task-cb ${t.done ? 'done' : ''}" onclick="toggleTask(${p.id}, ${i})">${t.done ? '✓' : ''}</div>
+          <span class="task-text ${t.done ? 'done' : ''}">${t.text}</span>
+          <span class="task-priority ${t.priority}">${t.priority === 'urgent' ? '🔴 Urgent' : t.priority === 'high' ? '🟡 Priorité' : 'Normal'}</span>
+          <button onclick="deleteTask(${p.id},${i})" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#ddd;font-size:16px;padding:0 2px;line-height:1" title="Supprimer">×</button>
+        </div>
+      `).join('')}
+      ${p.tasks.length === 0 ? '<div style="color:#bbb;font-size:13px;padding:12px 0;text-align:center">Aucune tâche</div>' : ''}
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <input id="newTaskInput" type="text" placeholder="Nouvelle tâche..." onkeydown="if(event.key==='Enter')addTask(${p.id})" style="flex:1;padding:9px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#e5e7eb'"/>
+        <select id="newTaskPriority" style="padding:9px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;outline:none;background:#fff">
+          <option value="normal">Normal</option>
+          <option value="high">🟡 Priorité</option>
+          <option value="urgent">🔴 Urgent</option>
+        </select>
+        <button onclick="addTask(${p.id})" style="padding:9px 14px;background:#00853F;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">+</button>
+      </div>
+    `;
+  } else if (currentPanelTab === 'notes') {
+    el.innerHTML = `
+      <div class="panel-section-title">Notes cliniques</div>
+      ${p.notes.map(n => `
+        <div class="note-card">
+          <div class="note-type">${n.type}</div>
+          <div class="note-text">${n.text}</div>
+          <div class="note-date">${n.date}</div>
+        </div>
+      `).join('')}
+      ${p.notes.length === 0 ? '<div style="color:#bbb;font-size:13px;padding:16px 0;text-align:center">Aucune note rédigée</div>' : ''}
+      <button onclick="openNoteModal()" style="margin-top:12px;width:100%;padding:10px;background:var(--green-light);color:var(--green);border:1.5px dashed rgba(0,133,63,0.3);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer">+ Ajouter une note DAR / SOAP</button>
+    `;
+  }
+}
+
+function toggleTask(patientId, taskIdx) {
+  const p = ALL_PATIENTS.find(x => x.id === patientId);
+  if (p) { p.tasks[taskIdx].done = !p.tasks[taskIdx].done; renderPanelContent(); saveState(); }
+}
+
+// ──────────────────────────────────────────────
+// RELÈVE
+// ──────────────────────────────────────────────
+function toggleReleve() {
+  const panel = document.getElementById('relevePanel');
+  const overlay = document.getElementById('panelOverlay');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    overlay.classList.remove('open');
+    document.getElementById('releveBtn').classList.remove('active');
+  } else {
+    closePanel();
+    panel.classList.add('open');
+    overlay.classList.add('open');
+    document.getElementById('releveBtn').classList.add('active');
+    if (!releveGenerated) generateReleve();
+  }
+}
+
+function generateReleve() {
+  releveGenerated = true;
+  const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const date = new Date().toLocaleDateString('fr-FR');
+  document.getElementById('releveTs').textContent = `Générée le ${date} à ${now}`;
+
+  const critiques = ALL_PATIENTS.filter(p => p.status === 'critique');
+  const moderes = ALL_PATIENTS.filter(p => p.status === 'modere');
+  const stables = ALL_PATIENTS.filter(p => p.status === 'stable');
+
+  let html = '';
+  let txt = `🏥 RELÈVE CARDIOLOGIE — CHU DE FANN\n📅 ${date} | ⏰ ${now}\n👨‍⚕️ Dr. M. Ndiaye\n${'─'.repeat(35)}\n\n`;
+
+  if (critiques.length) {
+    html += `<div class="releve-group"><div class="releve-group-title critique">🔴 Critiques (${critiques.length})</div>`;
+    txt += `🔴 CRITIQUES (${critiques.length})\n`;
+    critiques.forEach(p => {
+      const tags = [p.allergy ? `⚠️ ALLERGIE ${p.allergy}` : null, !p.dps ? '⚠️ DPS manquante' : null, p.exits ? '🚪 Sortie prévue' : null].filter(Boolean);
+      html += `<div class="releve-row critique"><strong>Lit ${p.bed} — ${p.firstName} ${p.lastName}</strong> (${p.age}a, J+${p.days})<br><span style="color:#666">${p.diagnosis}</span>${tags.length ? `<br><span style="color:var(--red);font-size:12px">${tags.join(' · ')}</span>` : ''}</div>`;
+      txt += `• Lit ${p.bed} — ${p.firstName} ${p.lastName} (${p.age}a, J+${p.days})\n  ${p.diagnosis}\n${tags.map(t => '  ' + t).join('\n')}${tags.length ? '\n' : ''}\n`;
+    });
+    html += '</div>';
+  }
+
+  if (moderes.length) {
+    html += `<div class="releve-group"><div class="releve-group-title modere">🟡 Modérés (${moderes.length})</div>`;
+    txt += `🟡 MODÉRÉS (${moderes.length})\n`;
+    moderes.forEach(p => {
+      const tags = [p.allergy ? `⚠️ ALLERGIE ${p.allergy}` : null, !p.dps ? '⚠️ DPS manquante' : null].filter(Boolean);
+      html += `<div class="releve-row modere"><strong>Lit ${p.bed} — ${p.firstName} ${p.lastName}</strong> (${p.age}a, J+${p.days})<br><span style="color:#666">${p.diagnosis}</span>${tags.length ? `<br><span style="color:var(--amber);font-size:12px">${tags.join(' · ')}</span>` : ''}</div>`;
+      txt += `• Lit ${p.bed} — ${p.firstName} ${p.lastName} (${p.age}a, J+${p.days})\n  ${p.diagnosis}\n`;
+    });
+    html += '</div>';
+  }
+
+  if (stables.length) {
+    html += `<div class="releve-group"><div class="releve-group-title stable">🟢 Stables (${stables.length})</div>`;
+    txt += `🟢 STABLES (${stables.length})\n`;
+    stables.forEach(p => {
+      html += `<div class="releve-row stable"><strong>Lit ${p.bed} — ${p.firstName} ${p.lastName}</strong> (${p.age}a, J+${p.days})<br><span style="color:#666">${p.diagnosis}</span>${p.exits ? '<br><span style="color:var(--blue);font-size:12px">🚪 Sortie prévue</span>' : ''}</div>`;
+      txt += `• Lit ${p.bed} — ${p.firstName} ${p.lastName}: ${p.diagnosis}\n`;
+    });
+    html += '</div>';
+  }
+
+  releveText = txt + `\n${'─'.repeat(35)}\nTotal: ${ALL_PATIENTS.length} patients | PulseBoard 🇸🇳`;
+  document.getElementById('releveContent').innerHTML = html;
+}
+
+function copyReleve() {
+  if (!releveText) { generateReleve(); }
+  navigator.clipboard.writeText(releveText).then(() => {
+    const toast = document.getElementById('copyToast');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2500);
+  }).catch(() => {
+    const toast = document.getElementById('copyToast');
+    toast.textContent = '📋 Texte prêt (copie manuelle sur mobile)';
+    toast.classList.add('show');
+    setTimeout(() => { toast.classList.remove('show'); toast.textContent = '✅ Copié — prêt pour WhatsApp'; }, 2500);
+  });
+}
+
+function exportPDF() {
+  if (!canDo('exportPDF')) {
+    showToast('Export PDF : activez le mode garde ou connectez-vous en tant que Résident / Chef', '#C2410C');
+    return;
+  }
+  if (!releveGenerated) generateReleve();
+
+  // Load jsPDF dynamically if not already loaded
+  if (typeof window.jspdf === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = () => _buildPDF();
+    s.onerror = () => showToast('Connexion requise pour générer le PDF', '#DC2626');
+    document.head.appendChild(s);
+  } else {
+    _buildPDF();
+  }
+}
+
+function pdfSafe(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/—/g, '-').replace(/–/g, '-')  // em/en dash
+    .replace(/·/g, '|').replace(/•/g, '-')  // middle dot, bullet
+    .replace(/’|‘/g, "'")                    // curly apostrophes
+    .replace(/“|”/g, '"')                    // curly quotes
+    .replace(/[^\x00-\xFF]/g, '?');                    // anything outside Latin-1
+}
+
+function _buildPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const now = new Date();
+  const date = now.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const time = now.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  const s = SERVICES[currentService] || SERVICES[0];
+  const pageW = 210;
+  const marginL = 14;
+  const marginR = 14;
+  const contentW = pageW - marginL - marginR;
+  let y = 0;
+
+  const addPage = () => { doc.addPage(); y = 16; };
+  const checkY = (need = 10) => { if (y + need > 275) addPage(); };
+
+  // ── HEADER BANNER ──
+  doc.setFillColor(0, 133, 63);
+  doc.rect(0, 0, 210, 28, 'F');
+
+  // Logo ECG line (simplified)
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.6);
+  const ecgX = marginL, ecgY = 14;
+  const pts = [[0,0],[4,0],[6,-6],[8,6],[10,-3],[12,3],[14,0],[22,0]];
+  pts.forEach(([dx,dy], i) => {
+    if (i === 0) doc.moveTo ? null : null;
+    const x1 = ecgX + (pts[i-1]?.[0]??0), y1 = ecgY + (pts[i-1]?.[1]??0);
+    const x2 = ecgX + dx, y2 = ecgY + dy;
+    if (i > 0) doc.line(x1, y1, x2, y2);
+  });
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('PulseBoard', marginL + 26, 11);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Ton service dans ta poche', marginL + 26, 17);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('RELEVE MEDICALE', pageW - marginR, 11, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(pdfSafe(`${s.name} - ${s.hospital}`), pageW - marginR, 16, { align: 'right' });
+  doc.text(pdfSafe(`${date}  ${time}`), pageW - marginR, 21, { align: 'right' });
+
+  y = 36;
+
+  // ── SERVICE INFO ROW ──
+  doc.setFillColor(248, 249, 250);
+  doc.roundedRect(marginL, y, contentW, 14, 2, 2, 'F');
+  doc.setTextColor(80, 80, 80);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  const critN = ALL_PATIENTS.filter(p=>p.status==='critique').length;
+  const modN = ALL_PATIENTS.filter(p=>p.status==='modere').length;
+  const stabN = ALL_PATIENTS.filter(p=>p.status==='stable').length;
+  doc.text(`Medecin : Dr. M. Ndiaye`, marginL + 4, y + 5);
+  doc.text(`Total patients : ${ALL_PATIENTS.length}`, marginL + 4, y + 10);
+  // Colored dots as filled circles instead of emoji
+  const dotY = y + 7.5;
+  doc.setFillColor(220, 38, 38); doc.circle(marginL + 62, dotY - 1, 1.5, 'F');
+  doc.setTextColor(80,80,80); doc.text(`Critiques : ${critN}`, marginL + 65, dotY);
+  doc.setFillColor(217, 119, 6); doc.circle(marginL + 90, dotY - 1, 1.5, 'F');
+  doc.text(`Moderes : ${modN}`, marginL + 93, dotY);
+  doc.setFillColor(22, 101, 52); doc.circle(marginL + 114, dotY - 1, 1.5, 'F');
+  doc.text(`Stables : ${stabN}`, marginL + 117, dotY);
+  y += 20;
+
+  // ── PATIENTS BY GROUP ──
+  const groups = [
+    { label: 'CRITIQUES', color: [220, 38, 38], bgColor: [254, 242, 242], patients: ALL_PATIENTS.filter(p=>p.status==='critique') },
+    { label: 'MODERES',    color: [217, 119, 6],  bgColor: [255, 251, 235], patients: ALL_PATIENTS.filter(p=>p.status==='modere') },
+    { label: 'STABLES',   color: [22, 101, 52],  bgColor: [240, 250, 244], patients: ALL_PATIENTS.filter(p=>p.status==='stable') },
+  ];
+
+  groups.forEach(g => {
+    if (!g.patients.length) return;
+    checkY(14);
+
+    // Group header
+    doc.setFillColor(...g.color);
+    doc.roundedRect(marginL, y, contentW, 8, 1, 1, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(`${g.label}  (${g.patients.length})`, marginL + 4, y + 5.5);
+    y += 11;
+
+    g.patients.forEach(p => {
+      const lines = [];
+      lines.push(pdfSafe(`${p.firstName} ${p.lastName}  -  ${p.age} ans  -  J+${p.days}  -  Lit ${p.bed}`));
+      lines.push(pdfSafe(p.diagnosis));
+      if (p.allergy) lines.push(pdfSafe(`! ALLERGIE : ${p.allergy}`));
+      if (!p.dps) lines.push('! DPS manquante');
+      if (p.exits) lines.push('>> Sortie prevue');
+      if (p.vitals) {
+        const v = p.vitals;
+        const temp = pdfSafe(v.temp||'-').replace(/°/g,'deg');
+        lines.push(`TA ${pdfSafe(v.bp)||'-'} | FC ${v.hr||'-'} bpm | SpO2 ${(v.spo2||'-').replace('%','')}% | T ${temp} | FR ${v.rr||'-'}/min`);
+      }
+      const cardH = 6 + lines.length * 5;
+      checkY(cardH + 3);
+
+      doc.setFillColor(...g.bgColor);
+      doc.setDrawColor(...g.color);
+      doc.setLineWidth(0.1);
+      doc.roundedRect(marginL, y, contentW, cardH, 1.5, 1.5, 'FD');
+
+      // Left colored bar
+      doc.setFillColor(...g.color);
+      doc.roundedRect(marginL, y, 2.5, cardH, 0.5, 0.5, 'F');
+
+      doc.setTextColor(30, 30, 30);
+      let ly = y + 5;
+      lines.forEach((l, i) => {
+        doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+        doc.setFontSize(i === 0 ? 9 : 8);
+        doc.setTextColor(i === 2 && p.allergy ? 150 : i >= 2 && !p.dps ? 150 : 40, 40, 40);
+        const wrapped = doc.splitTextToSize(l, contentW - 10);
+        doc.text(wrapped, marginL + 6, ly);
+        ly += wrapped.length * 4.5;
+      });
+      y += cardH + 3;
+    });
+    y += 4;
+  });
+
+  // ── FOOTER ──
+  checkY(18);
+  doc.setFillColor(245, 245, 245);
+  doc.rect(0, 280, 210, 17, 'F');
+  doc.setTextColor(150, 150, 150);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Document genere par PulseBoard - Usage medical confidentiel - Ne pas divulguer', 105, 287, { align:'center' });
+  doc.text(`PulseBoard © ${new Date().getFullYear()} · pulseboard.sn`, 105, 292, { align:'center' });
+
+  // ── PAGE NUMBERS ──
+  const total = doc.getNumberOfPages();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(180, 180, 180);
+    doc.text(`Page ${i} / ${total}`, pageW - marginR, 293, { align:'right' });
+  }
+
+  const fileName = `releve_${s.name.replace(/\s+/g,'_')}_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}h${String(now.getMinutes()).padStart(2,'0')}.pdf`;
+  doc.save(fileName);
+  showToast('✓ PDF téléchargé', '#00853F');
+}
+
+// ──────────────────────────────────────────────
+// CHAT
+// ──────────────────────────────────────────────
+let currentChannel = 'alertes';
+
+function switchChannel(ch, btn) {
+  currentChannel = ch;
+  document.querySelectorAll('.chat-ch-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // sync send-channel selector
+  const sel = document.getElementById('sendChannel');
+  if (sel) sel.value = ch;
+  renderChat();
+}
+
+function renderChat() {
+  const container = document.getElementById('chatMessages');
+  const msgs = CHAT_MESSAGES.filter(m => m.channel === currentChannel);
+
+  // update badge
+  const unreadAlertes = CHAT_MESSAGES.filter(m => m.channel === 'alertes' && m.type === 'system').length;
+  const badge = document.getElementById('badgeAlertes');
+  if (badge) badge.textContent = unreadAlertes;
+
+  if (!msgs.length) {
+    container.innerHTML = `<div style="text-align:center;color:#ccc;font-size:13px;margin:auto;padding:40px 0">Aucun message dans ce canal</div>`;
+    return;
+  }
+
+  container.innerHTML = msgs.map(m => {
+    const patTag = m.patient
+      ? `<div class="chat-patient-tag" onclick="openPatientById('${m.patient.id}')">
+           <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+           ${m.patient.name}
+         </div>`
+      : '';
+    const roleColors = { etudiant:'#2563EB', interne:'#00853F', resident:'#C2410C', chef:'#7C3AED' };
+    const senderLine = (m.type !== 'me' && m.type !== 'system')
+      ? `<div class="chat-sender">${m.sender}${m.senderRole ? ` <span style="font-weight:400;color:#bbb">· ${m.senderRole}</span>` : ''}</div>` : '';
+    const myRoleTag = m.type === 'me' && m.senderRole
+      ? `<div style="font-size:10px;color:rgba(255,255,255,0.7);text-align:right;margin-bottom:2px">${m.senderRole}</div>` : '';
+    const systemClass = m.channel === 'releve' ? 'system releve' : m.type;
+    return `
+      <div class="chat-msg ${m.type === 'system' ? systemClass : m.type}">
+        ${senderLine}
+        ${patTag}
+        ${myRoleTag}
+        <div class="chat-bubble">${m.text}</div>
+        <div class="chat-meta">${m.time}${m.type === 'system' ? ' · ' + m.sender : ''}</div>
+      </div>`;
+  }).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+function initChatPatientSelect() {
+  const sel = document.getElementById('sendPatient');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Patient (optionnel)</option>' +
+    ALL_PATIENTS.map(p => `<option value="${p.id}">${p.firstName} ${p.lastName} — Lit ${p.bed}</option>`).join('');
+}
+
+function openPatientById(id) {
+  const idx = ALL_PATIENTS.findIndex(p => p.id === id);
+  if (idx >= 0) { setTab('lits', null); switchToTab('lits'); setTimeout(() => openPanel(idx), 100); }
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const chSel = document.getElementById('sendChannel');
+  const patSel = document.getElementById('sendPatient');
+  const ch = chSel ? chSel.value : 'equipe';
+  const patOpt = patSel && patSel.value ? patSel.options[patSel.selectedIndex] : null;
+  const patient = patOpt ? { id: patSel.value, name: patOpt.text.split(' — ')[0] } : null;
+  const senderName = CURRENT_USER ? CURRENT_USER.name : 'Dr. M. Ndiaye';
+  const senderRole = CURRENT_USER ? getRoleLabel(CURRENT_USER) + (CURRENT_USER.enGarde ? ' · Garde' : '') : '';
+  CHAT_MESSAGES.push({
+    type: 'me', channel: ch, text,
+    time: new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+    sender: senderName, senderRole, patient
+  });
+  input.value = '';
+  saveState();
+  if (ch !== currentChannel) switchChannel(ch, document.querySelector(`.ch-${ch}`));
+  else renderChat();
+}
+
+// ──────────────────────────────────────────────
+// JOURNAL
+// ──────────────────────────────────────────────
+function renderJournal() {
+  document.getElementById('journalView').innerHTML = `
+    <div style="padding:16px 24px 8px"><div style="font-size:13px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.08em">Journal de garde — ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+    ${JOURNAL_EVENTS.map(e => `
+      <div class="journal-item">
+        <div class="journal-time">${e.time}</div>
+        <div class="journal-dot ${e.type}"></div>
+        <div class="journal-text">${e.text}</div>
+      </div>
+    `).join('')}
+  `;
+}
+
+// ──────────────────────────────────────────────
+// CONSULTATIONS
+// ──────────────────────────────────────────────
+function renderConsult() {
+  const statusLabel = { en_attente: 'En attente', vu: 'Vu', reporte: 'Reporté' };
+  const statusColor = { en_attente: '#F59E0B', vu: '#00853F', reporte: '#DC2626' };
+  const statusBg = { en_attente: '#FFF7ED', vu: '#f0faf4', reporte: '#FEF2F2' };
+  const hist = name => CONSULT_ARCHIVE.filter(a => a.patient === name).length;
+  document.getElementById('consultView').innerHTML = `
+    <div style="padding:16px 24px 8px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;font-weight:700">Consultations du jour (${CONSULTATIONS.length})</div>
+      <button class="topbar-btn" style="font-size:12px;padding:7px 12px" onclick="openAdmitConsult()">+ Ajouter</button>
+    </div>
+    ${CONSULTATIONS.map((c, i) => `
+      <div class="list-card" style="margin:0 24px 8px;cursor:pointer;transition:box-shadow .15s" onclick="openConsultDossier(${i})" onmouseenter="this.style.boxShadow='0 2px 12px rgba(0,133,63,0.12)'" onmouseleave="this.style.boxShadow=''">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:32px;height:32px;border-radius:50%;background:${c.gender==='F'?'#FDF2F8':'#EFF6FF'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${c.gender==='F'?'#9D174D':'#1E40AF'};flex-shrink:0">${c.patient.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+            <div style="min-width:0">
+              <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px">
+                ${c.patient}
+                ${c.allergy ? '<span title="Allergie connue" style="font-size:11px;background:#FEF2F2;color:#DC2626;padding:1px 6px;border-radius:10px;font-weight:600">⚠ Allergie</span>' : ''}
+                ${hist(c.patient) > 0 ? `<span style="font-size:11px;background:#EFF6FF;color:#2563EB;padding:1px 6px;border-radius:10px;font-weight:600">${hist(c.patient)} antérieure${hist(c.patient)>1?'s':''}</span>` : ''}
+              </div>
+              <div style="font-size:12px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.motif}</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <span style="background:${statusBg[c.status]};color:${statusColor[c.status]};font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px">${statusLabel[c.status]}</span>
+          <span style="font-size:11px;color:#aaa">${c.time}</span>
+          ${c.notes.length ? `<span style="font-size:11px;color:#00853F">${c.notes.length} note${c.notes.length>1?'s':''}</span>` : ''}
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+let currentConsult = null;
+let currentConsultTab = 'notes';
+
+function openConsultDossier(idx) {
+  currentConsult = CONSULTATIONS[idx];
+  currentConsultTab = 'notes';
+  renderConsultPanel();
+  document.getElementById('consultPanel').classList.add('open');
+  document.getElementById('consultPanelOverlay').classList.add('open');
+}
+
+function closeConsultPanel() {
+  document.getElementById('consultPanel').classList.remove('open');
+  document.getElementById('consultPanelOverlay').classList.remove('open');
+  currentConsult = null;
+}
+
+function setConsultTab(tab, btn) {
+  currentConsultTab = tab;
+  document.querySelectorAll('.cpanel-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderConsultPanel();
+}
+
+function renderConsultPanel() {
+  const c = currentConsult;
+  if (!c) return;
+  const hist = CONSULT_ARCHIVE.filter(a => a.patient === c.patient);
+  const statusColor = { en_attente: '#F59E0B', vu: '#00853F', reporte: '#DC2626' };
+  const statusLabel = { en_attente: 'En attente', vu: 'Vu', reporte: 'Reporté' };
+
+  document.getElementById('consultPanelHeader').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px">
+      <button onclick="closeConsultPanel()" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:20px;padding:0;line-height:1">×</button>
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#111">${c.patient}</div>
+        <div style="font-size:12px;color:#888">${c.motif} · ${c.age ? c.age+'ans' : ''} · ${c.time}</div>
+      </div>
+      <div style="margin-left:auto">
+        <select onchange="changeConsultStatus(this.value)" style="padding:6px 10px;border-radius:8px;border:1.5px solid ${statusColor[c.status]};color:${statusColor[c.status]};font-size:12px;font-weight:700;background:#fff;outline:none;cursor:pointer">
+          <option value="en_attente" ${c.status==='en_attente'?'selected':''}>En attente</option>
+          <option value="vu" ${c.status==='vu'?'selected':''}>✅ Vu</option>
+          <option value="reporte" ${c.status==='reporte'?'selected':''}>🔴 Reporté</option>
+        </select>
+      </div>
+    </div>
+    ${c.allergy ? `<div style="background:#FEF2F2;border-left:3px solid #DC2626;padding:8px 14px;margin-top:10px;font-size:12px;font-weight:600;color:#DC2626">⚠ ALLERGIE CONNUE : ${c.allergy}</div>` : ''}
+  `;
+
+  document.getElementById('consultPanelTabs').innerHTML = `
+    <button class="cpanel-tab ${currentConsultTab==='notes'?'active':''}" onclick="setConsultTab('notes',this)">
+      Notes cliniques ${c.notes.length ? `<span style="background:#00853F;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px">${c.notes.length}</span>` : ''}
+    </button>
+    <button class="cpanel-tab ${currentConsultTab==='hist'?'active':''}" onclick="setConsultTab('hist',this)">
+      Historique ${hist.length ? `<span style="background:#2563EB;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-left:4px">${hist.length}</span>` : ''}
+    </button>
+  `;
+
+  const body = document.getElementById('consultPanelBody');
+  if (currentConsultTab === 'notes') {
+    body.innerHTML = `
+      ${c.notes.length === 0 ? '<div style="text-align:center;padding:32px 0;color:#ccc;font-size:13px">Aucune note pour cette consultation</div>' : ''}
+      ${c.notes.map(n => `
+        <div style="background:#f8f9fa;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #eee">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#00853F;margin-bottom:6px">${n.type}</div>
+          <div style="font-size:13px;color:#444;line-height:1.7;white-space:pre-line">${n.text}</div>
+          <div style="font-size:11px;color:#bbb;margin-top:6px">${n.date}</div>
+        </div>
+      `).join('')}
+      <button onclick="openConsultNoteModal()" style="width:100%;padding:10px;background:#f0faf4;color:#00853F;border:1.5px dashed rgba(0,133,63,0.3);border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;margin-top:4px">+ Ajouter une note DAR / SOAP / Observation</button>
+    `;
+  } else {
+    body.innerHTML = hist.length === 0 ? `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:32px;margin-bottom:8px">📋</div>
+        <div style="font-size:14px;font-weight:600;color:#333">Première consultation</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px">${c.patient} n'a pas d'antécédent dans ce service</div>
+      </div>
+    ` : `
+      <div style="font-size:12px;color:#aaa;padding:0 0 12px">${hist.length} consultation${hist.length>1?'s':''} antérieure${hist.length>1?'s':''} — ${c.patient}</div>
+      ${hist.slice().reverse().map((h, i) => `
+        <div onclick="openHistDetail(${hist.length - 1 - i})" style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='#00853F';this.style.background='#f9fffe'" onmouseleave="this.style.borderColor='#e5e7eb';this.style.background='#fff'">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#111">${h.motif}</div>
+              <div style="font-size:12px;color:#888;margin-top:3px">${h.service} · ${h.date}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              ${h.notes.length ? `<span style="font-size:11px;background:#f0faf4;color:#00853F;padding:2px 8px;border-radius:10px;font-weight:600">${h.notes.length} note${h.notes.length>1?'s':''}</span>` : '<span style="font-size:11px;color:#ccc">Aucune note</span>'}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  document.getElementById('consultPanelFooter').innerHTML = `
+    <button onclick="closeConsultPanel()" style="flex:1;padding:11px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Fermer</button>
+    <button onclick="markConsultVu()" style="flex:2;padding:11px;background:${c.status==='vu'?'#f5f5f5':'#00853F'};color:${c.status==='vu'?'#aaa':'#fff'};border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">
+      ${c.status==='vu' ? '✅ Déjà marqué Vu' : 'Marquer Vu & Archiver'}
+    </button>
+  `;
+}
+
+function changeConsultStatus(val) {
+  if (!currentConsult) return;
+  currentConsult.status = val;
+  renderConsultPanel();
+  renderConsult();
+}
+
+function markConsultVu() {
+  if (!currentConsult) return;
+  const c = currentConsult;
+  if (c.status === 'vu') return;
+  c.status = 'vu';
+  // Archive this consultation
+  const now = new Date();
+  CONSULT_ARCHIVE.push({
+    patient: c.patient,
+    motif: c.motif,
+    date: `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`,
+    status: 'vu',
+    service: SERVICES[currentService]?.name || 'Cardiologie',
+    notes: [...c.notes]
+  });
+  renderConsultPanel();
+  renderConsult();
+  saveState();
+  showToast(`✓ ${c.patient} marqué Vu — consultion archivée`, '#00853F');
+}
+
+function openConsultNoteModal() {
+  if (!currentConsult) return;
+  const c = currentConsult;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  // Reuse the note modal but save to consultation instead
+  const overlay = document.createElement('div');
+  overlay.id = 'consultNoteOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;max-height:94vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid #f0f0f0;flex-shrink:0">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111">Note de consultation</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${c.patient} · ${dateStr}</div>
+        </div>
+        <button onclick="document.getElementById('consultNoteOverlay').remove()" style="background:#f5f5f5;border:none;cursor:pointer;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="display:flex;gap:0;border-bottom:1px solid #f0f0f0;flex-shrink:0">
+        <button class="cnote-fmt" onclick="switchConsultFmt('dar',this)" style="flex:1;padding:11px 6px;border:none;background:none;font-size:12px;font-weight:700;color:#00853F;border-bottom:2px solid #00853F;cursor:pointer">DAR</button>
+        <button class="cnote-fmt" onclick="switchConsultFmt('soap',this)" style="flex:1;padding:11px 6px;border:none;background:none;font-size:12px;font-weight:700;color:#aaa;border-bottom:2px solid transparent;cursor:pointer">SOAP</button>
+        <button class="cnote-fmt" onclick="switchConsultFmt('obs',this)" style="flex:1;padding:11px 6px;border:none;background:none;font-size:12px;font-weight:700;color:#aaa;border-bottom:2px solid transparent;cursor:pointer">Observation</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding:16px 20px" id="consultNoteBody">
+        ${buildNoteForm('dar', { vitals: {} })}
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #f0f0f0;display:flex;gap:8px;flex-shrink:0">
+        <button onclick="document.getElementById('consultNoteOverlay').remove()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+        <button onclick="submitConsultNote('${dateStr}')" style="flex:2;padding:12px;background:#00853F;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">Enregistrer la note</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+}
+
+function openHistDetail(idx) {
+  const c = currentConsult;
+  if (!c) return;
+  const hist = CONSULT_ARCHIVE.filter(a => a.patient === c.patient);
+  const h = hist[idx];
+  if (!h) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'histDetailOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;max-height:88vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 14px;border-bottom:1px solid #f0f0f0;flex-shrink:0">
+        <button onclick="document.getElementById('histDetailOverlay').remove()" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:20px;padding:0;line-height:1">←</button>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:700;color:#111">${h.motif}</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${c.patient} · ${h.service}</div>
+        </div>
+        <span style="background:#f0faf4;color:#00853F;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;flex-shrink:0">✅ ${h.date}</span>
+      </div>
+
+      <div style="overflow-y:auto;flex:1;padding:16px 20px">
+        ${h.notes.length === 0 ? `
+          <div style="text-align:center;padding:40px 0">
+            <div style="font-size:28px;margin-bottom:8px">📝</div>
+            <div style="font-size:14px;color:#aaa">Aucune note enregistrée pour cette consultation</div>
+          </div>
+        ` : h.notes.map(n => `
+          <div style="background:#f8f9fa;border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid #eee">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <span style="background:${n.type==='DAR'?'#f0faf4':n.type==='SOAP'?'#EFF6FF':'#FFF7ED'};color:${n.type==='DAR'?'#00853F':n.type==='SOAP'?'#2563EB':'#92400e'};font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.05em">${n.type}</span>
+              <span style="font-size:11px;color:#bbb">${n.date}</span>
+            </div>
+            <div style="font-size:13px;color:#333;line-height:1.8;white-space:pre-line">${n.text}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="padding:14px 20px;border-top:1px solid #f0f0f0;flex-shrink:0">
+        <button onclick="document.getElementById('histDetailOverlay').remove()" style="width:100%;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Fermer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+}
+
+function switchConsultFmt(fmt, btn) {
+  document.querySelectorAll('.cnote-fmt').forEach(t => { t.style.color='#aaa'; t.style.borderBottom='2px solid transparent'; });
+  btn.style.color='#00853F'; btn.style.borderBottom='2px solid #00853F';
+  document.getElementById('consultNoteBody').innerHTML = buildNoteForm(fmt, { vitals: {} });
+  document.getElementById('consultNoteBody')._fmt = fmt;
+}
+
+function submitConsultNote(dateStr) {
+  const body = document.getElementById('consultNoteBody');
+  const fmt = body._fmt || 'dar';
+  let type, text;
+  if (fmt === 'dar') {
+    const d = document.getElementById('dar_d').value.trim();
+    const a = document.getElementById('dar_a').value.trim();
+    const r = document.getElementById('dar_r').value.trim();
+    if (!d) { document.getElementById('dar_d').style.borderColor='#e53'; return; }
+    type='DAR'; text=`D: ${d}${a?'\nA: '+a:''}${r?'\nR: '+r:''}`;
+  } else if (fmt === 'soap') {
+    const s = document.getElementById('soap_s').value.trim();
+    const o = document.getElementById('soap_o').value.trim();
+    const a = document.getElementById('soap_a').value.trim();
+    const plan = document.getElementById('soap_p').value.trim();
+    if (!s) { document.getElementById('soap_s').style.borderColor='#e53'; return; }
+    type='SOAP'; text=`S: ${s}${o?'\nO: '+o:''}${a?'\nA: '+a:''}${plan?'\nP: '+plan:''}`;
+  } else {
+    const sf = document.getElementById('obs_sf').value.trim();
+    if (!sf) { document.getElementById('obs_sf').style.borderColor='#e53'; return; }
+    const ep=document.getElementById('obs_ep').value.trim(), rs=document.getElementById('obs_rs').value.trim(),
+          hd=document.getElementById('obs_hd').value.trim(), tt=document.getElementById('obs_tt').value.trim(),
+          cat=document.getElementById('obs_cat').value.trim();
+    type='OBSERVATION';
+    text=[sf?`Signes fonctionnels :\n${sf}`:'', ep?`Examen physique :\n${ep}`:'', rs?`Résumé syndromique :\n${rs}`:'',
+          hd?`Hypothèses :\n${hd}`:'', tt?`Traitement :\n${tt}`:'', cat?`CAT :\n${cat}`:''].filter(Boolean).join('\n\n');
+  }
+  currentConsult.notes.push({ type, text, date: dateStr });
+  currentConsult.status = 'vu';
+  document.getElementById('consultNoteOverlay').remove();
+  renderConsultPanel();
+  renderConsult();
+  showToast(`✓ Note ${type} enregistrée`, '#00853F');
+}
+
+// ──────────────────────────────────────────────
+// ADMIT MODAL
+// ──────────────────────────────────────────────
+function openAdmit() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const defaultDate = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'admitOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+
+  overlay.innerHTML = `
+    <div id="admitModal" style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;max-height:92vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,0px)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid #f0f0f0">
+        <div style="font-size:16px;font-weight:700;color:#111">Ajout Rapide</div>
+        <button onclick="closeAdmit()" style="background:none;border:none;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#f5f5f5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div style="padding:18px 20px">
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Nom ou initiales <span style="color:#e53">*</span></label>
+          <input id="admitNom" type="text" placeholder="Nom, initiales ou code..." style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Motif <span style="color:#e53">*</span></label>
+          <input id="admitMotif" type="text" placeholder="Motif de consultation..." style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:8px">Urgence <span style="color:#e53">*</span></label>
+          <div style="display:flex;gap:8px">
+            <button class="urgence-btn active-stable" data-val="stable" onclick="selectUrgence(this,'stable')" style="flex:1;padding:9px 6px;border-radius:8px;border:1.5px solid #00853F;background:#00853F;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Stable</button>
+            <button class="urgence-btn" data-val="modere" onclick="selectUrgence(this,'modere')" style="flex:1;padding:9px 6px;border-radius:8px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:13px;font-weight:600;cursor:pointer">Modéré</button>
+            <button class="urgence-btn" data-val="urgent" onclick="selectUrgence(this,'urgent')" style="flex:1;padding:9px 6px;border-radius:8px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:13px;font-weight:600;cursor:pointer">Urgent</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:8px">Statut <span style="color:#e53">*</span></label>
+          <div style="display:flex;gap:8px">
+            <button class="statut-btn" data-val="entrant" onclick="selectStatut(this,'entrant')" style="flex:1;padding:9px 6px;border-radius:8px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:13px;font-weight:600;cursor:pointer">Entrant</button>
+            <button class="statut-btn" data-val="hospitalise" onclick="selectStatut(this,'hospitalise')" style="flex:1;padding:9px 6px;border-radius:8px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:13px;font-weight:600;cursor:pointer">Hospitalisé</button>
+            <button class="statut-btn active-consultation" data-val="consultation" onclick="selectStatut(this,'consultation')" style="flex:1;padding:9px 6px;border-radius:8px;border:1.5px solid #2563eb;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Consultation</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:16px">
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Lit</label>
+            <input id="admitLit" type="text" placeholder="Ex: Lit 3" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+            <div style="font-size:10px;color:#aaa;margin-top:3px">Laisser vide si pas encore assigné</div>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Secteur</label>
+            <input id="admitSecteur" type="text" placeholder="Ex: Déchocage" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Date et heure d'admission</label>
+          <div style="position:relative">
+            <input id="admitDate" type="text" value="${defaultDate}" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;color:#333" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+            <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          </div>
+          <div style="font-size:10px;color:#aaa;margin-top:3px">Laissez tel quel pour un patient entrant maintenant</div>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <label style="font-size:12px;font-weight:600;color:#e53;display:block;margin-bottom:6px">⚠ Allergies connues</label>
+          <input id="admitAllergies" type="text" placeholder="Ex: Pénicilline, AINS, Iode" style="width:100%;padding:10px 12px;border:1px solid #fca5a5;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box;color:#333" onfocus="this.style.borderColor='#e53'" onblur="this.style.borderColor='#fca5a5'" />
+          <div style="font-size:10px;color:#aaa;margin-top:3px">Laisser vide si aucune allergie connue</div>
+        </div>
+
+        <details style="margin-bottom:20px">
+          <summary style="font-size:13px;font-weight:600;color:#555;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #eee;border-radius:8px">
+            Plus de détails
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </summary>
+          <div style="padding-top:12px;display:flex;flex-direction:column;gap:12px">
+            <div>
+              <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Antécédents médicaux</label>
+              <textarea placeholder="HTA, Diabète type 2, Drépanocytose..." rows="2" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;outline:none;resize:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"></textarea>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Traitement en cours</label>
+              <textarea placeholder="Metformine 500mg, Amlodipine 5mg..." rows="2" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;outline:none;resize:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"></textarea>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Médecin référent</label>
+              <input type="text" placeholder="Dr. Ndiaye" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+            </div>
+          </div>
+        </details>
+
+        <button onclick="submitAdmit()" style="width:100%;padding:14px;background:#E5531A;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:0.2px">
+          Ajouter le patient
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) closeAdmit(); });
+  setTimeout(() => { document.getElementById('admitNom').focus(); }, 100);
+}
+
+function closeAdmit() {
+  const el = document.getElementById('admitOverlay');
+  if(el) el.remove();
+}
+
+function selectUrgence(btn, val) {
+  document.querySelectorAll('.urgence-btn').forEach(b => {
+    b.style.background = '#fff'; b.style.color = '#555'; b.style.borderColor = '#ddd';
+  });
+  const colors = {stable:'#00853F', modere:'#F59E0B', urgent:'#DC2626'};
+  btn.style.background = colors[val]; btn.style.color = '#fff'; btn.style.borderColor = colors[val];
+}
+
+function selectStatut(btn, val) {
+  document.querySelectorAll('.statut-btn').forEach(b => {
+    b.style.background = '#fff'; b.style.color = '#555'; b.style.borderColor = '#ddd';
+  });
+  btn.style.background = '#2563eb'; btn.style.color = '#fff'; btn.style.borderColor = '#2563eb';
+}
+
+function submitAdmit() {
+  const nom = document.getElementById('admitNom').value.trim();
+  const motif = document.getElementById('admitMotif').value.trim();
+  const lit = document.getElementById('admitLit').value.trim();
+  const secteur = document.getElementById('admitSecteur').value.trim();
+  const allergies = document.getElementById('admitAllergies').value.trim();
+  const dateVal = document.getElementById('admitDate').value.trim();
+
+  if(!nom) { document.getElementById('admitNom').style.borderColor='#e53'; document.getElementById('admitNom').focus(); return; }
+  if(!motif) { document.getElementById('admitMotif').style.borderColor='#e53'; document.getElementById('admitMotif').focus(); return; }
+
+  const urgenceBtn = document.querySelector('.urgence-btn[style*="color: rgb(255"]') || document.querySelector('.urgence-btn[style*="color:#fff"]');
+  const statutBtn = document.querySelector('.statut-btn[style*="color: rgb(255"]') || document.querySelector('.statut-btn[style*="color:#fff"]');
+  const urgence = urgenceBtn ? urgenceBtn.dataset.val : 'stable';
+  const statut = statutBtn ? statutBtn.dataset.val : 'consultation';
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  if (statut === 'consultation') {
+    CONSULTATIONS.unshift({ patient: nom, motif, status: 'en_attente', time: timeStr });
+    const cnt = document.getElementById('tabCountConsult');
+    if(cnt) cnt.textContent = CONSULTATIONS.length;
+    saveState();
+    showToast(`✓ ${nom} ajouté aux consultations`, '#F59E0B');
+    setTab('consult', document.querySelector('.tab[onclick*="consult"]'));
+    document.querySelector('.tab[onclick*="consult"]').classList.add('active');
+
+  } else if (statut === 'hospitalise') {
+    const newId = Math.max(...ALL_PATIENTS.map(p=>p.id)) + 1;
+    const bedNum = lit ? parseInt(lit) : Math.max(...ALL_PATIENTS.map(p=>p.bed||0)) + 1;
+    const statusMap = { stable: 'stable', modere: 'modere', urgent: 'critique' };
+    ALL_PATIENTS.unshift({
+      id: newId, bed: bedNum,
+      firstName: nom.split(' ')[0] || nom,
+      lastName: nom.split(' ').slice(1).join(' ') || '',
+      age: '?', gender: 'M',
+      diagnosis: motif,
+      status: statusMap[urgence] || 'stable',
+      days: 0,
+      allergy: allergies || null,
+      sector: secteur || '',
+      vitals: { pa: '—', fc: '—', spo2: '—', temp: '—' },
+      tasks: [],
+      notes: [],
+      exits: false
+    });
+    renderPatients();
+    saveState();
+    showToast(`✓ ${nom} admis — Lit ${bedNum}`, '#00853F');
+    setTab('lits', document.querySelector('.tab[onclick*="lits"]'));
+    document.querySelector('.tab[onclick*="lits"]').classList.add('active');
+
+  } else {
+    // Entrant
+    ENTRANTS.unshift({ patient: nom, motif, urgence, time: timeStr, allergies });
+    const tabEl = document.getElementById('tabEntrants');
+    if(tabEl) tabEl.style.display = '';
+    const cnt = document.getElementById('tabCountEntrants');
+    if(cnt) cnt.textContent = ENTRANTS.length;
+    saveState();
+    showToast(`✓ ${nom} en file d'attente — orientation en cours`, '#6366F1');
+    setTab('entrants', document.getElementById('tabEntrants'));
+    document.getElementById('tabEntrants').classList.add('active');
+  }
+
+  closeAdmit();
+}
+
+function showToast(msg, color) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${color};color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.2);white-space:nowrap`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function renderEntrants() {
+  const urgenceColors = { stable: '#00853F', modere: '#F59E0B', urgent: '#DC2626' };
+  const urgenceLabels = { stable: 'Stable', modere: 'Modéré', urgent: 'Urgent' };
+  const container = document.getElementById('entrantsView');
+  if (!ENTRANTS.length) {
+    container.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#bbb;font-size:14px">Aucun entrant en attente d'orientation</div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div style="padding:16px 24px 8px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:13px;font-weight:700">File d'attente — orientation (${ENTRANTS.length})</div>
+      <div style="font-size:11px;color:#aaa">Affecter un lit → "Admettre"</div>
+    </div>
+    ${ENTRANTS.map((e, i) => `
+      <div class="list-card" style="margin:0 24px 8px;cursor:default;border-left:3px solid ${urgenceColors[e.urgence]||'#aaa'}">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-weight:700;font-size:14px">${e.patient}</div>
+            <div style="font-size:12px;color:#666;margin-top:2px">${e.motif}</div>
+            ${e.allergies ? `<div style="font-size:11px;color:#DC2626;margin-top:3px">⚠ Allergie : ${e.allergies}</div>` : ''}
+          </div>
+          <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <span style="background:${urgenceColors[e.urgence]||'#aaa'};color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px">${urgenceLabels[e.urgence]||'—'}</span>
+            <span style="font-size:11px;color:#aaa">${e.time}</span>
+            <button onclick="orientEntrant(${i})" style="font-size:11px;padding:4px 10px;border:1px solid #00853F;color:#00853F;background:#fff;border-radius:6px;cursor:pointer">Orienter</button>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function orientEntrant(idx) {
+  const e = ENTRANTS[idx];
+  ENTRANTS.splice(idx, 1);
+  const cnt = document.getElementById('tabCountEntrants');
+  if(cnt) cnt.textContent = ENTRANTS.length;
+  if(!ENTRANTS.length) document.getElementById('tabEntrants').style.display = 'none';
+  closeAdmit();
+  // Pré-remplir le modal avec les infos de l'entrant
+  openAdmit();
+  setTimeout(() => {
+    document.getElementById('admitNom').value = e.patient;
+    document.getElementById('admitMotif').value = e.motif;
+    if(e.allergies) document.getElementById('admitAllergies').value = e.allergies;
+    // Sélectionner le bon niveau d'urgence
+    const btn = document.querySelector(`.urgence-btn[data-val="${e.urgence}"]`);
+    if(btn) selectUrgence(btn, e.urgence);
+    // Pré-sélectionner hospitalisé
+    const hBtn = document.querySelector('.statut-btn[data-val="hospitalise"]');
+    if(hBtn) selectStatut(hBtn, 'hospitalise');
+  }, 50);
+}
+
+// ──────────────────────────────────────────────
+// RÉFÉRER
+// ──────────────────────────────────────────────
+const HOPITAUX_SENEGAL = [
+  'CHU Aristide Le Dantec', 'CHU de Fann', 'Hôpital Principal de Dakar',
+  'Hôpital Abass Ndao', 'CHR de Thiès', 'CHR de Ziguinchor',
+  'CHR de Tambacounda', 'Hôpital de Pikine', 'CHR de Saint-Louis',
+  'CHR de Kaolack', 'CHR de Diourbel', 'Hôpital de Rufisque'
+];
+
+function openReferModal() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const overlay = document.createElement('div');
+  overlay.id = 'referOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid #f0f0f0">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111">Référer le patient</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${p.firstName} ${p.lastName} — Lit ${p.bed}</div>
+        </div>
+        <button onclick="document.getElementById('referOverlay').remove()" style="background:#f5f5f5;border:none;cursor:pointer;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="padding:18px 20px">
+
+        <div style="margin-bottom:16px;position:relative">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:8px">Hôpital de destination <span style="color:#e53">*</span></label>
+          <div id="referHopitalBox" onclick="toggleHopitalDropdown()" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;background:#fff;color:#aaa;cursor:pointer;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box;user-select:none">
+            <span id="referHopitalLabel">Sélectionner un hôpital...</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div id="referHopitalDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:100;max-height:220px;overflow-y:auto">
+            <div style="padding:8px 10px;border-bottom:1px solid #f0f0f0">
+              <input id="referHopitalSearch" type="text" placeholder="Rechercher un hôpital..." oninput="filterHopitaux(this.value)" style="width:100%;padding:7px 10px;border:1px solid #eee;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box"/>
+            </div>
+            <div id="referHopitalList">
+              ${[...HOPITAUX_SENEGAL,'Autre établissement'].map(h =>
+                `<div class="hopital-option" data-val="${h}" onclick="selectHopital('${h.replace(/'/g,"\\'")}',this)" style="padding:10px 14px;font-size:13px;color:#333;cursor:pointer;border-bottom:0.5px solid #f5f5f5">${h}</div>`
+              ).join('')}
+            </div>
+          </div>
+          <input type="hidden" id="referHopitalVal"/>
+        </div>
+
+        <div id="autreHopitalField" style="display:none;margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Nom de l'établissement</label>
+          <input type="text" id="referAutreHopital" placeholder="Ex: Clinique du Cap-Vert" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box"/>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:8px">Service / Spécialité</label>
+          <div id="referSpecialiteWrap">
+            <div style="font-size:12px;color:#aaa;font-style:italic;padding:4px 0">Sélectionnez d'abord un hôpital</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Motif du transfert <span style="color:#e53">*</span></label>
+          <textarea id="referMotif" rows="3" placeholder="Ex: Besoin d'une coronarographie en urgence, plateau technique insuffisant..." style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;outline:none;resize:none;box-sizing:border-box"></textarea>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Degré d'urgence</label>
+          <div style="display:flex;gap:8px">
+            <button class="refer-urg-btn" data-val="routine" onclick="selectReferUrg(this)" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:13px;font-weight:600;cursor:pointer">Routine</button>
+            <button class="refer-urg-btn active" data-val="urgent" onclick="selectReferUrg(this)" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #F59E0B;background:#F59E0B;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Urgent</button>
+            <button class="refer-urg-btn" data-val="vital" onclick="selectReferUrg(this)" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:13px;font-weight:600;cursor:pointer">Pronostic vital</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Médecin correspondant (optionnel)</label>
+          <input type="text" id="referMedecin" placeholder="Dr. Ndiaye — Chef service Cardiologie" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box"/>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Documents à joindre</label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${['Lettre de référence','Résultats biologie','ECG','Imagerie','Compte-rendu opératoire'].map(d =>
+              `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#555;cursor:pointer"><input type="checkbox" checked style="accent-color:#00853F"/> ${d}</label>`
+            ).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <button onclick="document.getElementById('referOverlay').remove()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+          <button onclick="submitRefer()" style="flex:2;padding:12px;background:#2563EB;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">
+            Confirmer le transfert
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+
+  document.getElementById('referHopital').addEventListener('change', function() {
+    document.getElementById('autreHopitalField').style.display = this.value === 'autre' ? '' : 'none';
+  });
+}
+
+const HOPITAL_SPECIALITES = {
+  'CHU Aristide Le Dantec': ['Cardiologie','Chirurgie cardiaque','Neurologie','Neurochirurgie','Chirurgie générale','Chirurgie vasculaire','Orthopédie / Traumatologie','Urologie','Médecine interne','Hématologie','Oncologie','Radiologie / Imagerie','Radiothérapie','Réanimation','Anesthésie-Réanimation','ORL','Ophtalmologie','Dermatologie','Stomatologie / Maxillo-faciale','Pédiatrie','Urgences'],
+  'CHU de Fann': ['Neurologie','Neurochirurgie','Psychiatrie','Médecine interne','Infectiologie','Pneumologie','Réanimation','Radiologie / Imagerie','Cardiologie','Gastro-entérologie','Dermatologie','Pédiatrie','Urgences','Anesthésie-Réanimation'],
+  'Hôpital Principal de Dakar': ['Cardiologie','Chirurgie cardiaque','Chirurgie générale','Chirurgie vasculaire','Neurologie','Orthopédie / Traumatologie','Médecine interne','Réanimation','Soins intensifs / USC','Radiologie / Imagerie','Urgences','Anesthésie-Réanimation','ORL','Ophtalmologie','Gynécologie','Maternité','Pédiatrie'],
+  'Hôpital Abass Ndao': ['Médecine interne','Cardiologie','Pneumologie','Gastro-entérologie','Hépatologie','Endocrinologie / Diabétologie','Néphrologie / Dialyse','Hématologie','Infectiologie','Radiologie / Imagerie','Réanimation','Urgences','Gynécologie','Maternité','Néonatologie','Pédiatrie'],
+  'CHR de Thiès': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Néonatologie','Pédiatrie','Orthopédie / Traumatologie','Radiologie / Imagerie','Réanimation','Urgences','Ophtalmologie','ORL'],
+  'CHR de Ziguinchor': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Pédiatrie','Orthopédie / Traumatologie','Radiologie / Imagerie','Urgences'],
+  'CHR de Tambacounda': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Pédiatrie','Radiologie / Imagerie','Urgences'],
+  'Hôpital de Pikine': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Néonatologie','Pédiatrie','Urgences','Réanimation','Radiologie / Imagerie'],
+  'CHR de Saint-Louis': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Pédiatrie','Orthopédie / Traumatologie','Radiologie / Imagerie','Urgences','Ophtalmologie'],
+  'CHR de Kaolack': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Pédiatrie','Urgences','Radiologie / Imagerie'],
+  'CHR de Diourbel': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Pédiatrie','Urgences'],
+  'Hôpital de Rufisque': ['Médecine interne','Chirurgie générale','Gynécologie','Maternité','Pédiatrie','Urgences'],
+  'Autre établissement': ['Cardiologie','Chirurgie cardiaque','Réanimation','Soins intensifs / USC','Neurologie','Neurochirurgie','Psychiatrie','Chirurgie générale','Chirurgie vasculaire','Orthopédie / Traumatologie','Urologie','Médecine interne','Infectiologie','Hématologie','Oncologie','Endocrinologie / Diabétologie','Pneumologie','Gastro-entérologie','Hépatologie','Néphrologie / Dialyse','Radiologie / Imagerie','Radiothérapie','Ophtalmologie','ORL','Dermatologie','Stomatologie / Maxillo-faciale','Gynécologie','Maternité','Néonatologie','Pédiatrie','Urgences','Anesthésie-Réanimation']
+};
+
+function toggleHopitalDropdown() {
+  const dd = document.getElementById('referHopitalDropdown');
+  dd.style.display = dd.style.display === 'none' ? '' : 'none';
+  if (dd.style.display !== 'none') {
+    setTimeout(() => document.getElementById('referHopitalSearch').focus(), 50);
+    document.addEventListener('click', closeHopitalDropdown, {once:true, capture:true});
+  }
+}
+
+function closeHopitalDropdown(e) {
+  const box = document.getElementById('referHopitalBox');
+  const dd = document.getElementById('referHopitalDropdown');
+  if (dd && box && !box.contains(e.target) && !dd.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+}
+
+function filterHopitaux(q) {
+  const list = document.getElementById('referHopitalList');
+  list.querySelectorAll('.hopital-option').forEach(el => {
+    el.style.display = el.dataset.val.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function selectHopital(nom, el) {
+  document.getElementById('referHopitalVal').value = nom;
+  const label = document.getElementById('referHopitalLabel');
+  label.textContent = nom;
+  label.style.color = '#111';
+  document.getElementById('referHopitalDropdown').style.display = 'none';
+  document.getElementById('referHopitalBox').style.borderColor = '#00853F';
+
+  const isAutre = nom === 'Autre établissement';
+  document.getElementById('autreHopitalField').style.display = isAutre ? '' : 'none';
+
+  // Highlight selected option
+  document.querySelectorAll('.hopital-option').forEach(o => {
+    o.style.background = o.dataset.val === nom ? '#f0faf4' : '';
+    o.style.fontWeight = o.dataset.val === nom ? '600' : '400';
+    o.style.color = o.dataset.val === nom ? '#00853F' : '#333';
+  });
+
+  // Render specialites for this hospital
+  const specs = HOPITAL_SPECIALITES[nom] || HOPITAL_SPECIALITES['Autre établissement'];
+  const wrap = document.getElementById('referSpecialiteWrap');
+  wrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px">${
+    specs.map(s => `<button onclick="toggleSpecialite(this)" style="padding:7px 12px;border-radius:20px;border:1.5px solid #ddd;background:#fff;color:#555;font-size:12px;font-weight:500;cursor:pointer">${s}</button>`).join('')
+  }</div>`;
+}
+
+function toggleSpecialite(btn) {
+  const active = btn.style.background === 'rgb(0, 133, 63)' || btn.style.borderColor === 'rgb(0, 133, 63)';
+  if (active) {
+    btn.style.background = '#fff'; btn.style.color = '#555'; btn.style.borderColor = '#ddd';
+  } else {
+    btn.style.background = '#00853F'; btn.style.color = '#fff'; btn.style.borderColor = '#00853F';
+  }
+}
+
+function selectReferUrg(btn) {
+  const colors = { routine: '#6B7280', urgent: '#F59E0B', vital: '#DC2626' };
+  document.querySelectorAll('.refer-urg-btn').forEach(b => {
+    b.style.background = '#fff'; b.style.color = '#555'; b.style.borderColor = '#ddd';
+  });
+  const c = colors[btn.dataset.val];
+  btn.style.background = c; btn.style.color = '#fff'; btn.style.borderColor = c;
+}
+
+function submitRefer() {
+  const hopital = document.getElementById('referHopitalVal').value;
+  const motif = document.getElementById('referMotif').value.trim();
+  if (!hopital) { document.getElementById('referHopital').style.borderColor = '#e53'; return; }
+  if (!motif) { document.getElementById('referMotif').style.borderColor = '#e53'; return; }
+  const dest = hopital === 'autre' ? document.getElementById('referAutreHopital').value || 'Autre établissement' : hopital;
+  document.getElementById('referOverlay').remove();
+  saveState();
+  showToast(`✓ Transfert confirmé → ${dest}`, '#2563EB');
+  if (currentPatient) {
+    currentPatient.referred = dest;
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background:#EFF6FF;border-left:3px solid #2563EB;padding:10px 14px;font-size:12px;color:#1D4ED8;font-weight:600;margin:8px 20px;border-radius:6px';
+    banner.innerHTML = `<svg style="vertical-align:-3px;margin-right:6px" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M13 5H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-8"/><path d="M15 3h6m0 0v6m0-6L10 14"/></svg>Référé → ${dest}`;
+    const content = document.getElementById('panelContent');
+    if (content) content.prepend(banner);
+  }
+}
+
+// ──────────────────────────────────────────────
+// SORTIE
+// ──────────────────────────────────────────────
+function openSortieModal() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const overlay = document.createElement('div');
+  overlay.id = 'sortieOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:20px;padding-bottom:32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111">Sortie du patient</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${p.firstName} ${p.lastName} — Lit ${p.bed}</div>
+        </div>
+        <button onclick="document.getElementById('sortieOverlay').remove()" style="background:#f5f5f5;border:none;cursor:pointer;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:8px">Mode de sortie</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${[['domicile','Retour à domicile','#00853F'],['transfert','Transfert hôpital','#2563EB'],['deces','Décès','#DC2626'],['fugue','Fugue / AMA','#6B7280']].map(([v,l,c]) =>
+            `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #eee;border-radius:8px;cursor:pointer">
+              <input type="radio" name="sortieMode" value="${v}" style="accent-color:${c}" ${v==='domicile'?'checked':''}/>
+              <span style="font-size:13px;font-weight:500;color:#333">${l}</span>
+            </label>`
+          ).join('')}
+        </div>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Observations de sortie</label>
+        <textarea rows="3" placeholder="État clinique à la sortie, consignes, ordonnance remise..." style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;outline:none;resize:none;box-sizing:border-box"></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('sortieOverlay').remove()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+        <button onclick="confirmSortie()" style="flex:2;padding:12px;background:#DC2626;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">Confirmer la sortie</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+}
+
+function confirmSortie() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const mode = document.querySelector('input[name="sortieMode"]:checked')?.value || 'domicile';
+  const labels = { domicile:'Retour domicile', transfert:'Transfert', deces:'Décès', fugue:'Fugue' };
+  ALL_PATIENTS = ALL_PATIENTS.filter(x => x.id !== p.id);
+  document.getElementById('sortieOverlay').remove();
+  closePanel();
+  renderPatients();
+  saveState();
+  showToast(`Lit ${p.bed} libéré — ${p.firstName} ${p.lastName} (${labels[mode]})`, '#6B7280');
+}
+
+// ──────────────────────────────────────────────
+// MODIFIER
+// ──────────────────────────────────────────────
+function openModifierModal() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const overlay = document.createElement('div');
+  overlay.id = 'modifOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid #f0f0f0">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111">Modifier le dossier</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${p.firstName} ${p.lastName} — Lit ${p.bed}</div>
+        </div>
+        <button onclick="document.getElementById('modifOverlay').remove()" style="background:#f5f5f5;border:none;cursor:pointer;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="padding:18px 20px">
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Prénom</label>
+            <input id="modifPrenom" type="text" value="${p.firstName}" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Nom</label>
+            <input id="modifNom" type="text" value="${p.lastName}" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Diagnostic</label>
+          <input id="modifDiag" type="text" value="${p.diagnosis}" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Lit</label>
+            <input id="modifLit" type="text" value="${p.bed}" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Âge</label>
+            <input id="modifAge" type="text" value="${p.age}" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:8px">Statut clinique</label>
+          <div style="display:flex;gap:8px">
+            ${[['stable','Stable','#00853F'],['modere','Modéré','#F59E0B'],['critique','Critique','#DC2626']].map(([v,l,c]) =>
+              `<button class="modif-status-btn" data-val="${v}" onclick="selectModifStatus(this,'${c}')" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid ${v===p.status?c:'#ddd'};background:${v===p.status?c:'#fff'};color:${v===p.status?'#fff':'#555'};font-size:13px;font-weight:600;cursor:pointer">${l}</button>`
+            ).join('')}
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#e53;display:block;margin-bottom:6px">⚠ Allergies connues</label>
+            <input id="modifAllergy" type="text" value="${p.allergy||''}" placeholder="Aucune allergie connue" style="width:100%;padding:10px 12px;border:1px solid #fca5a5;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box"/>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Groupe sanguin</label>
+            <select id="modifBlood" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;background:#fff">
+              <option value="">Non renseigné</option>
+              ${['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g=>`<option value="${g}" ${p.bloodType===g?'selected':''}>${g}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Contact d'urgence</label>
+          <input id="modifContact" type="text" value="${p.emergency_contact||''}" placeholder="Ex: Épouse — +221 77 432 10 56" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#ddd'"/>
+        </div>
+        <div style="margin-bottom:20px">
+          <label style="font-size:12px;font-weight:600;color:#444;display:block;margin-bottom:6px">Sortie prévue aujourd'hui</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;cursor:pointer">
+            <input type="checkbox" id="modifExits" ${p.exits?'checked':''} style="accent-color:#00853F;width:16px;height:16px"/> Oui, sortie prévue aujourd'hui
+          </label>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="document.getElementById('modifOverlay').remove()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+          <button onclick="saveModifier()" style="flex:2;padding:12px;background:#00853F;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+}
+
+function selectModifStatus(btn, color) {
+  document.querySelectorAll('.modif-status-btn').forEach(b => {
+    b.style.background = '#fff'; b.style.color = '#555'; b.style.borderColor = '#ddd';
+  });
+  btn.style.background = color; btn.style.color = '#fff'; btn.style.borderColor = color;
+}
+
+// ──────────────────────────────────────────────
+// NOTE MODALE (DAR / SOAP / OBSERVATION)
+// ──────────────────────────────────────────────
+function openNoteModal() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'noteOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;max-height:94vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid #f0f0f0;flex-shrink:0">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111">Nouvelle note clinique</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${p.firstName} ${p.lastName} — Lit ${p.bed} · ${dateStr}</div>
+        </div>
+        <button onclick="document.getElementById('noteOverlay').remove()" style="background:#f5f5f5;border:none;cursor:pointer;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Format selector (filtré selon le rôle) -->
+      <div style="display:flex;gap:0;border-bottom:1px solid #f0f0f0;flex-shrink:0" id="noteFmtBar">
+        ${canDo('noteDAR') ? `<button class="note-fmt-tab active" onclick="switchNoteFormat('dar',this)" style="flex:1;padding:11px 6px;border:none;background:none;font-size:12px;font-weight:700;color:#00853F;border-bottom:2px solid #00853F;cursor:pointer;letter-spacing:.03em">DAR</button>` : ''}
+        ${canDo('noteSOAP') ? `<button class="note-fmt-tab" onclick="switchNoteFormat('soap',this)" style="flex:1;padding:11px 6px;border:none;background:none;font-size:12px;font-weight:700;color:#aaa;border-bottom:2px solid transparent;cursor:pointer;letter-spacing:.03em">SOAP</button>` : ''}
+        <button class="note-fmt-tab ${!canDo('noteDAR') ? 'active' : ''}" onclick="switchNoteFormat('obs',this)" style="flex:1;padding:11px 6px;border:none;background:none;font-size:12px;font-weight:700;color:${!canDo('noteDAR')?'#00853F':'#aaa'};border-bottom:2px solid ${!canDo('noteDAR')?'#00853F':'transparent'};cursor:pointer;letter-spacing:.03em">Observation</button>
+        ${!canDo('noteDAR') ? `<div style="flex:2;padding:10px 8px;font-size:11px;color:#F59E0B;display:flex;align-items:center;gap:4px"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Observation uniquement</div>` : ''}
+      </div>
+
+      <div style="overflow-y:auto;flex:1;padding:16px 20px" id="noteFormBody">
+        ${buildNoteForm(canDo('noteDAR') ? 'dar' : 'obs', p)}
+      </div>
+
+      <div style="padding:14px 20px;border-top:1px solid #f0f0f0;display:flex;gap:8px;flex-shrink:0">
+        <button onclick="document.getElementById('noteOverlay').remove()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+        <button onclick="submitNote()" style="flex:2;padding:12px;background:#00853F;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">Enregistrer la note</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  setTimeout(() => document.querySelector('#noteFormBody textarea') && document.querySelector('#noteFormBody textarea').focus(), 100);
+}
+
+function buildNoteForm(fmt, p) {
+  const ta = (id, placeholder, rows=3) =>
+    `<textarea id="${id}" rows="${rows}" placeholder="${placeholder}" style="width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#e5e7eb'"></textarea>`;
+  const label = (txt, required=false, hint='') =>
+    `<label style="font-size:12px;font-weight:700;color:#444;display:block;margin-bottom:5px;margin-top:14px;text-transform:uppercase;letter-spacing:.04em">${txt}${required?'<span style="color:#e53"> *</span>':''}${hint?`<span style="font-weight:400;text-transform:none;letter-spacing:0;color:#aaa;margin-left:6px">${hint}</span>`:''}</label>`;
+
+  // Pre-fill from patient SUIVI data
+  const vitals = p.vitals || {};
+  const bp = vitals.bp || vitals.pa || '—';
+  const hr = vitals.hr || vitals.fc || '—';
+  const spo2 = vitals.spo2 || '—';
+  const temp = vitals.temp || '—';
+  const rr = vitals.rr || '—';
+  const vitalsSummary = `TA ${bp} | FC ${hr} | SpO2 ${spo2} | T° ${temp} | FR ${rr}`;
+
+  if (fmt === 'dar') return `
+    <div style="background:#f0faf4;border-radius:8px;padding:10px 12px;margin-bottom:4px;font-size:12px;color:#005f2d;line-height:1.5">
+      <strong>DAR</strong> — Données · Actions · Résultats
+    </div>
+    ${label('D — Données', true, 'Signes fonctionnels, plaintes, constantes')}
+    ${ta('dar_d', `Ex: Douleur thoracique 4/10, dyspnée de repos. ${vitalsSummary}`, 3)}
+    ${label('A — Actions', true, 'Décisions, actes, prescriptions')}
+    ${ta('dar_a', 'Ex: Maintien double antiagrégation, scope continu, bilan biologique demandé.', 3)}
+    ${label('R — Résultats', true, 'Évolution, réponse au traitement')}
+    ${ta('dar_r', 'Ex: Amélioration partielle après morphine. Surveillance rapprochée.', 3)}
+  `;
+
+  if (fmt === 'soap') return `
+    <div style="background:#EFF6FF;border-radius:8px;padding:10px 12px;margin-bottom:4px;font-size:12px;color:#1e40af;line-height:1.5">
+      <strong>SOAP</strong> — Subjectif · Objectif · Assessment · Plan
+    </div>
+    ${label('S — Subjectif', true, 'Ce que dit le patient')}
+    ${ta('soap_s', 'Ex: "Je me sens mieux mais j\'ai encore un peu de souffle". Asthénie persistante.', 2)}
+    ${label('O — Objectif', true, 'Examen clinique + constantes')}
+    ${ta('soap_o', `Constantes : ${vitalsSummary}\nEx: Auscultation : crépitants bibasaux persistants. Œdèmes MI ++.`, 3)}
+    ${label('A — Assessment', true, 'Analyse / Diagnostic')}
+    ${ta('soap_a', 'Ex: Insuffisance cardiaque gauche en voie de compensation. Réponse aux diurétiques satisfaisante.', 2)}
+    ${label('P — Plan', true, 'Traitement, examens, suite')}
+    ${ta('soap_p', 'Ex: Continuer furosémide IV 40mg x2/j. Ionogramme demain matin. Pesée quotidienne.', 2)}
+  `;
+
+  if (fmt === 'obs') return `
+    <div style="background:#FFF7ED;border-radius:8px;padding:10px 12px;margin-bottom:4px;font-size:12px;color:#92400e;line-height:1.5">
+      <strong>Observation médicale structurée</strong>
+    </div>
+    ${label('Signes fonctionnels', true, 'Plaintes du patient')}
+    ${ta('obs_sf', 'Ex: Douleur thoracique rétrosternale 6/10, irradiant dans le bras gauche. Dyspnée d\'effort NYHA III. Sueurs nocturnes.', 3)}
+    ${label('Examen physique', true, 'Constantes + clinique')}
+    ${ta('obs_ep', `Constantes : ${vitalsSummary}\nEx: Conscience normale, état général altéré. Auscultation cardiaque : souffle systolique 2/6 en foyer aortique. Poumons : crépitants bibasaux. Abdomen : hépatomégalie +2 cm.`, 4)}
+    ${label('Résumé syndromique', true, 'Synthèse des syndromes identifiés')}
+    ${ta('obs_rs', 'Ex: Syndrome d\'insuffisance cardiaque gauche décompensée sur cardiopathie ischémique. Syndrome coronarien instable non écarté.', 2)}
+    ${label('Hypothèses diagnostiques', false, 'Par ordre de probabilité')}
+    ${ta('obs_hd', '1. \n2. \n3. ', 3)}
+    ${label('Traitement en cours', false, 'Médicaments + posologie')}
+    ${ta('obs_tt', p.treatment || 'Ex: Furosémide 40mg IV x2/j\nAspégic 100mg/j\nBisoprolol 5mg/j', 3)}
+    ${label('Conduite à tenir', false, 'Décisions, examens complémentaires')}
+    ${ta('obs_cat', 'Ex: ETT en urgence, troponine H0/H6, avis cardiologique.', 2)}
+  `;
+  return '';
+}
+
+function switchNoteFormat(fmt, btn) {
+  document.querySelectorAll('.note-fmt-tab').forEach(t => {
+    t.style.color = '#aaa'; t.style.borderBottom = '2px solid transparent';
+  });
+  btn.style.color = '#00853F'; btn.style.borderBottom = '2px solid #00853F';
+  document.getElementById('noteFormBody').innerHTML = buildNoteForm(fmt, currentPatient);
+  document.getElementById('noteFormBody')._fmt = fmt;
+  setTimeout(() => { const ta = document.querySelector('#noteFormBody textarea'); if(ta) ta.focus(); }, 50);
+}
+
+function submitNote() {
+  const body = document.getElementById('noteFormBody');
+  const fmt = body._fmt || 'dar';
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  let type, text;
+
+  if (fmt === 'dar') {
+    const d = document.getElementById('dar_d').value.trim();
+    const a = document.getElementById('dar_a').value.trim();
+    const r = document.getElementById('dar_r').value.trim();
+    if (!d) { document.getElementById('dar_d').style.borderColor='#e53'; return; }
+    type = 'DAR';
+    text = `D: ${d}${a ? '\nA: ' + a : ''}${r ? '\nR: ' + r : ''}`;
+  } else if (fmt === 'soap') {
+    const s = document.getElementById('soap_s').value.trim();
+    const o = document.getElementById('soap_o').value.trim();
+    const a = document.getElementById('soap_a').value.trim();
+    const plan = document.getElementById('soap_p').value.trim();
+    if (!s) { document.getElementById('soap_s').style.borderColor='#e53'; return; }
+    type = 'SOAP';
+    text = `S: ${s}${o ? '\nO: ' + o : ''}${a ? '\nA: ' + a : ''}${plan ? '\nP: ' + plan : ''}`;
+  } else {
+    const sf = document.getElementById('obs_sf').value.trim();
+    const ep = document.getElementById('obs_ep').value.trim();
+    const rs = document.getElementById('obs_rs').value.trim();
+    const hd = document.getElementById('obs_hd').value.trim();
+    const tt = document.getElementById('obs_tt').value.trim();
+    const cat = document.getElementById('obs_cat').value.trim();
+    if (!sf) { document.getElementById('obs_sf').style.borderColor='#e53'; return; }
+    type = 'OBSERVATION';
+    text = [
+      sf ? `Signes fonctionnels :\n${sf}` : '',
+      ep ? `Examen physique :\n${ep}` : '',
+      rs ? `Résumé syndromique :\n${rs}` : '',
+      hd ? `Hypothèses diagnostiques :\n${hd}` : '',
+      tt ? `Traitement :\n${tt}` : '',
+      cat ? `Conduite à tenir :\n${cat}` : ''
+    ].filter(Boolean).join('\n\n');
+  }
+
+  currentPatient.notes.unshift({ type, text, date: dateStr });
+  document.getElementById('noteOverlay').remove();
+
+  // Refresh panel if on notes tab
+  if (currentPanelTab === 'notes') renderPanelContent();
+
+  // Switch to notes tab to show the new note
+  setPanelTab('notes', document.querySelector('.panel-tab[onclick*="notes"]'));
+  renderPanelContent();
+
+  JOURNAL_EVENTS.unshift({ time: `${pad(now.getHours())}:${pad(now.getMinutes())}`, type: 'note', text: `<strong>Note ${type}</strong> — ${currentPatient.firstName} ${currentPatient.lastName} (Lit ${currentPatient.bed})` });
+  saveState();
+  showToast(`✓ Note ${type} enregistrée`, '#00853F');
+}
+
+// ──────────────────────────────────────────────
+// TÂCHES — ajouter / supprimer
+// ──────────────────────────────────────────────
+function addTask(patientId) {
+  const input = document.getElementById('newTaskInput');
+  const priority = document.getElementById('newTaskPriority').value;
+  const text = input.value.trim();
+  if (!text) { input.focus(); return; }
+  const p = ALL_PATIENTS.find(x => x.id === patientId);
+  if (p) {
+    p.tasks.push({ text, priority, done: false });
+    input.value = '';
+    renderPanelContent();
+    saveState();
+    setTimeout(() => { const i = document.getElementById('newTaskInput'); if(i) i.focus(); }, 50);
+  }
+}
+
+function deleteTask(patientId, idx) {
+  const p = ALL_PATIENTS.find(x => x.id === patientId);
+  if (p) { p.tasks.splice(idx, 1); renderPanelContent(); saveState(); }
+}
+
+// ──────────────────────────────────────────────
+// CONSTANTES — nouvelle saisie
+// ──────────────────────────────────────────────
+function openVitauxModal() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const overlay = document.createElement('div');
+  overlay.id = 'vitauxOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:20px 20px 32px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111">Nouvelles constantes</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">${p.firstName} ${p.lastName} — Lit ${p.bed}</div>
+        </div>
+        <button onclick="document.getElementById('vitauxOverlay').remove()" style="background:#f5f5f5;border:none;cursor:pointer;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        ${[
+          ['vit_bp','Tension artérielle','ex: 130/80','mmHg', p.vitals.bp],
+          ['vit_hr','Fréquence cardiaque','ex: 72','bpm', p.vitals.hr],
+          ['vit_spo2','SpO₂','ex: 98%','%', p.vitals.spo2],
+          ['vit_temp','Température','ex: 37.2','°C', p.vitals.temp],
+          ['vit_rr','Fréquence respi.','ex: 16','/min', p.vitals.rr],
+          ['vit_gly','Glycémie (optionnel)','ex: 1.2 g/L','g/L', p.vitals.gly||''],
+        ].map(([id,label,ph,unit,cur]) => `
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">${label} <span style="font-weight:400;color:#aaa">(${unit})</span></label>
+            <input id="${id}" type="text" value="${cur||''}" placeholder="${ph}" style="width:100%;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='#e5e7eb'"/>
+          </div>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('vitauxOverlay').remove()" style="flex:1;padding:12px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+        <button onclick="saveVitaux()" style="flex:2;padding:12px;background:#00853F;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">Enregistrer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  setTimeout(() => document.getElementById('vit_bp').focus(), 100);
+}
+
+function saveVitaux() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  // Archive current vitals
+  if (!p.vitalsHistory) p.vitalsHistory = [];
+  p.vitalsHistory.push({ ...p.vitals, date: dateStr });
+  // Save new vitals
+  const get = id => document.getElementById(id).value.trim();
+  if (get('vit_bp')) p.vitals.bp = get('vit_bp');
+  if (get('vit_hr')) p.vitals.hr = get('vit_hr');
+  if (get('vit_spo2')) p.vitals.spo2 = get('vit_spo2');
+  if (get('vit_temp')) p.vitals.temp = get('vit_temp');
+  if (get('vit_rr')) p.vitals.rr = get('vit_rr');
+  if (get('vit_gly')) p.vitals.gly = get('vit_gly');
+  document.getElementById('vitauxOverlay').remove();
+  renderPanelContent();
+  saveState();
+  showToast('✓ Constantes enregistrées', '#00853F');
+}
+
+// ──────────────────────────────────────────────
+// CONSULTATION — ouvrir admit pré-rempli
+// ──────────────────────────────────────────────
+function openAdmitConsult() {
+  openAdmit();
+  setTimeout(() => {
+    const btn = document.querySelector('.statut-btn[data-val="consultation"]');
+    if (btn) selectStatut(btn, 'consultation');
+  }, 80);
+}
+
+function saveModifier() {
+  if (!currentPatient) return;
+  const p = currentPatient;
+  p.firstName = document.getElementById('modifPrenom').value.trim() || p.firstName;
+  p.lastName = document.getElementById('modifNom').value.trim() || p.lastName;
+  p.diagnosis = document.getElementById('modifDiag').value.trim() || p.diagnosis;
+  p.bed = parseInt(document.getElementById('modifLit').value) || p.bed;
+  p.age = document.getElementById('modifAge').value.trim() || p.age;
+  p.allergy = document.getElementById('modifAllergy').value.trim() || null;
+  p.bloodType = document.getElementById('modifBlood').value || null;
+  p.emergency_contact = document.getElementById('modifContact').value.trim() || null;
+  p.exits = document.getElementById('modifExits').checked;
+  const statusBtn = document.querySelector('.modif-status-btn[style*="color: rgb(255"]') || document.querySelector('.modif-status-btn[style*="color:#fff"]');
+  if (statusBtn) p.status = statusBtn.dataset.val;
+  document.getElementById('modifOverlay').remove();
+  renderPatients();
+  renderPanelContent();
+  const banner = document.getElementById('allergyBanner');
+  if (banner) banner.style.display = p.allergy ? 'flex' : 'none';
+  saveState();
+  showToast(`✓ Dossier mis à jour — ${p.firstName} ${p.lastName}`, '#00853F');
+}
+
+// ──────────────────────────────────────────────
+// PERSISTANCE LOCALE
+// ──────────────────────────────────────────────
+const DB_KEY = 'pb_service_data';
+let _saveTimer = null;
+
+function saveState() {
+  const ind = document.getElementById('saveIndicator');
+  const lbl = document.getElementById('saveIndicatorText');
+  if (ind) { ind.className = 'show saving'; lbl.textContent = 'Sauvegarde…'; }
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(DB_KEY, JSON.stringify({
+        ALL_PATIENTS, CONSULTATIONS, CONSULT_ARCHIVE,
+        ENTRANTS, JOURNAL_EVENTS, CHAT_MESSAGES,
+        savedAt: new Date().toISOString()
+      }));
+      if (ind) {
+        ind.className = 'show saved';
+        lbl.textContent = 'Sauvegardé · ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        setTimeout(() => { ind.className = ''; }, 2500);
+      }
+    } catch(e) {
+      if (ind) { ind.className = ''; }
+    }
+  }, 600);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (data.ALL_PATIENTS)    ALL_PATIENTS    = data.ALL_PATIENTS;
+    if (data.CONSULTATIONS)   CONSULTATIONS   = data.CONSULTATIONS;
+    if (data.CONSULT_ARCHIVE) CONSULT_ARCHIVE = data.CONSULT_ARCHIVE;
+    if (data.ENTRANTS)        ENTRANTS        = data.ENTRANTS;
+    if (data.JOURNAL_EVENTS)  JOURNAL_EVENTS  = data.JOURNAL_EVENTS;
+    if (data.CHAT_MESSAGES)   CHAT_MESSAGES   = data.CHAT_MESSAGES;
+    return true;
+  } catch(e) { return false; }
+}
+
+function confirmResetData() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:340px;width:90%;text-align:center">
+      <div style="width:48px;height:48px;background:#FEF2F2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+        <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#DC2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div style="font-size:16px;font-weight:700;color:#111;margin-bottom:8px">Réinitialiser les données ?</div>
+      <div style="font-size:13px;color:#888;margin-bottom:24px">Tous les patients, notes et messages seront supprimés. Cette action est irréversible.</div>
+      <div style="display:flex;gap:10px">
+        <button onclick="this.closest('div[style]').remove()" style="flex:1;padding:11px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Annuler</button>
+        <button onclick="resetData();this.closest('div[style]').remove()" style="flex:1;padding:11px;background:#DC2626;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">Réinitialiser</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function resetData() {
+  localStorage.removeItem(DB_KEY);
+  location.reload();
+}
+
+// ──────────────────────────────────────────────
+// SYSTÈME DE RÔLES
+// ──────────────────────────────────────────────
+
+const ROLES = {
+  etudiant: { label: 'Étudiant', color: 'role-etudiant', avatarBg: '#2563EB' },
+  interne:  { label: 'Interne',  color: 'role-interne',  avatarBg: '#00853F' },
+  resident: { label: 'Résident', color: 'role-resident', avatarBg: '#C2410C' },
+  chef:     { label: 'Chef de service', color: 'role-chef', avatarBg: '#7C3AED' },
+};
+
+let CURRENT_USER = null;
+
+function loadUser() {
+  try {
+    const saved = localStorage.getItem('pb_user');
+    if (saved) CURRENT_USER = JSON.parse(saved);
+  } catch(e) {}
+}
+
+function saveUser() {
+  localStorage.setItem('pb_user', JSON.stringify(CURRENT_USER));
+}
+
+function canDo(action) {
+  if (!CURRENT_USER) return false;
+  const r = CURRENT_USER.role;
+  const garde = CURRENT_USER.enGarde;
+  // Interne, résident et chef ont tous les droits sans restriction
+  if (r === 'interne' || r === 'resident' || r === 'chef') return true;
+  // Étudiant : droits limités, élargis en mode garde
+  switch(action) {
+    case 'exportPDF':    return garde;
+    case 'refer':        return false;
+    case 'sortie':       return false;
+    case 'modifier':     return garde;
+    case 'noteDAR':      return false;
+    case 'noteSOAP':     return false;
+    case 'noteObs':      return true;
+    case 'validerTache': return garde;
+    default:             return true;
+  }
+}
+
+function getRoleLabel(user) {
+  if (!user) return '';
+  const base = ROLES[user.role]?.label || user.role;
+  if (user.role === 'etudiant' && user.year) return `Étudiant ${user.year}e année`;
+  return base;
+}
+
+function updateSidebarUser() {
+  if (!CURRENT_USER) return;
+  const u = CURRENT_USER;
+  const r = ROLES[u.role];
+  const initials = u.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+  document.getElementById('userAvatar').textContent = initials;
+  document.getElementById('userAvatar').style.background = r.avatarBg;
+  document.getElementById('userName').textContent = u.name;
+  document.getElementById('userRoleBadge').innerHTML =
+    `<span class="role-badge ${r.color}">${getRoleLabel(u)}${u.enGarde ? ' · En garde' : ''}</span>`;
+
+  // garde toggle : seulement pour étudiants et internes
+  const wrap = document.getElementById('gardeToggleWrap');
+  const btn  = document.getElementById('gardeToggleBtn');
+  const lbl  = document.getElementById('gardeToggleLabel');
+  if (u.role === 'etudiant' || u.role === 'interne') {
+    wrap.style.display = 'block';
+    btn.className = 'garde-toggle' + (u.enGarde ? ' active' : '');
+    lbl.textContent = u.enGarde ? 'Mode garde actif' : 'Activer mode garde';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function toggleGarde() {
+  if (!CURRENT_USER) return;
+  CURRENT_USER.enGarde = !CURRENT_USER.enGarde;
+  saveUser();
+  updateSidebarUser();
+  showToast(CURRENT_USER.enGarde ? 'Mode garde activé — accès PDF déverrouillé' : 'Mode garde désactivé', CURRENT_USER.enGarde ? '#C2410C' : '#555');
+}
+
+// ── Modal sélection de profil ──
+function openProfileModal(forceNew = false) {
+  if (document.getElementById('profileModalOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'profileModalOverlay';
+  overlay.className = 'profile-modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="profile-modal">
+      <div style="margin-bottom:22px">
+        <div style="font-size:20px;font-weight:800;color:#111;margin-bottom:4px">Bienvenue sur PulseBoard</div>
+        <div style="font-size:13px;color:#aaa">Sélectionnez votre rôle pour continuer</div>
+      </div>
+
+      <div id="roleCards">
+        <div class="role-card" data-role="etudiant" onclick="selectRoleCard(this)">
+          <div class="role-card-icon" style="background:#EFF6FF">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#2563EB" stroke-width="2"><path d="M12 14l9-5-9-5-9 5 9 5z"/><path d="M12 14l6.16-3.422A12.083 12.083 0 0121 21H3a12.083 12.083 0 012.84-10.422L12 14z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#111">Étudiant en médecine</div>
+            <div style="font-size:11px;color:#aaa;margin-top:2px">6e, 7e ou 8e année</div>
+          </div>
+        </div>
+        <div class="role-card" data-role="interne" onclick="selectRoleCard(this)">
+          <div class="role-card-icon" style="background:#F0FAF4">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#00853F" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#111">Interne</div>
+            <div style="font-size:11px;color:#aaa;margin-top:2px">Internat de médecine</div>
+          </div>
+        </div>
+        <div class="role-card" data-role="resident" onclick="selectRoleCard(this)">
+          <div class="role-card-icon" style="background:#FFF7ED">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#C2410C" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#111">Résident</div>
+            <div style="font-size:11px;color:#aaa;margin-top:2px">Résidanat / Spécialisation</div>
+          </div>
+        </div>
+        <div class="role-card" data-role="chef" onclick="selectRoleCard(this)">
+          <div class="role-card-icon" style="background:#FDF4FF">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#7C3AED" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M18 8l2-2M4 8L2 6"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:#111">Chef de service / PH</div>
+            <div style="font-size:11px;color:#aaa;margin-top:2px">Praticien hospitalier, PU-PH</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="yearPickerWrap" style="display:none;margin-top:2px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Année d'études</div>
+        <div class="year-chips">
+          <div class="year-chip" data-year="6" onclick="selectYear(this)">6e année</div>
+          <div class="year-chip" data-year="7" onclick="selectYear(this)">7e année</div>
+          <div class="year-chip" data-year="8" onclick="selectYear(this)">8e année</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px">
+        <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Votre nom</div>
+        <input id="profileNameInput" type="text" placeholder="Dr. Prénom Nom" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;outline:none" oninput="checkProfileReady()" onfocus="this.style.borderColor='#00853F'" onblur="this.style.borderColor='var(--border)'"/>
+      </div>
+
+      <button id="profileConfirmBtn" onclick="confirmProfile()" disabled
+        style="margin-top:16px;width:100%;padding:13px;background:#ddd;color:#fff;border:none;border-radius:11px;font-size:15px;font-weight:700;cursor:not-allowed;transition:all .2s">
+        Accéder au dashboard
+      </button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // pré-remplir si utilisateur existant
+  if (CURRENT_USER && !forceNew) {
+    const card = overlay.querySelector(`[data-role="${CURRENT_USER.role}"]`);
+    if (card) { card.classList.add('selected'); }
+    if (CURRENT_USER.role === 'etudiant') {
+      overlay.querySelector('#yearPickerWrap').style.display = 'block';
+      if (CURRENT_USER.year) {
+        const chip = overlay.querySelector(`[data-year="${CURRENT_USER.year}"]`);
+        if (chip) chip.classList.add('selected');
+      }
+    }
+    if (CURRENT_USER.name) overlay.querySelector('#profileNameInput').value = CURRENT_USER.name;
+    checkProfileReady();
+  }
+}
+
+let _selectedRole = null;
+let _selectedYear = null;
+
+function selectRoleCard(el) {
+  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  _selectedRole = el.dataset.role;
+  const yearWrap = document.getElementById('yearPickerWrap');
+  if (_selectedRole === 'etudiant') { yearWrap.style.display = 'block'; }
+  else { yearWrap.style.display = 'none'; _selectedYear = null; }
+  checkProfileReady();
+}
+
+function selectYear(el) {
+  document.querySelectorAll('.year-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  _selectedYear = parseInt(el.dataset.year);
+  checkProfileReady();
+}
+
+function checkProfileReady() {
+  const name = (document.getElementById('profileNameInput')?.value || '').trim();
+  const roleOk = !!_selectedRole;
+  const yearOk = _selectedRole !== 'etudiant' || !!_selectedYear;
+  const nameOk = name.length >= 2;
+  const btn = document.getElementById('profileConfirmBtn');
+  const ready = roleOk && yearOk && nameOk;
+  btn.disabled = !ready;
+  btn.style.background = ready ? '#00853F' : '#ddd';
+  btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+}
+
+function confirmProfile() {
+  const name = document.getElementById('profileNameInput').value.trim();
+  if (!name || !_selectedRole) return;
+  CURRENT_USER = { name, role: _selectedRole, year: _selectedYear, enGarde: false };
+  saveUser();
+  document.getElementById('profileModalOverlay')?.remove();
+  updateSidebarUser();
+  initChatPatientSelect();
+  showToast(`Bienvenue, ${name}`, '#00853F');
+}
+
+</script>
+</body>
+</html>
