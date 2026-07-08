@@ -38,6 +38,7 @@ export default function ServiceView() {
   const [showConsultDialog, setShowConsultDialog] = useState(false);
   const [selectedConsult, setSelectedConsult] = useState<any>(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [patientSearch, setPatientSearch] = useState("");
   const [consultForm, setConsultForm] = useState({ firstName: "", lastName: "", motif: "", notes: "" });
 
   const { data: service, isLoading: serviceLoading } = trpc.services.get.useQuery({ id: serviceId }, { enabled: serviceId > 0 });
@@ -49,6 +50,11 @@ export default function ServiceView() {
   const { data: pendingRequests = [] } = trpc.membership.pendingRequests.useQuery({ serviceId }, { enabled: !!isChef });
 
   const utils = trpc.useUtils();
+
+  const { data: searchResults = [] } = trpc.patients.search.useQuery(
+    { query: patientSearch },
+    { enabled: patientSearch.length >= 2 }
+  );
 
   const resolveRequest = trpc.membership.resolve.useMutation({
     onSuccess: (_, vars) => {
@@ -62,6 +68,7 @@ export default function ServiceView() {
       utils.consultations.list.invalidate({ serviceId });
       setShowConsultDialog(false);
       setConsultForm({ firstName: "", lastName: "", motif: "", notes: "" });
+      setPatientSearch("");
       toast.success("Consultation ajoutée");
     },
   });
@@ -487,6 +494,48 @@ export default function ServiceView() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Recherche patient hospitalisé */}
+            <div>
+              <Label className="text-xs">Rechercher un patient hospitalisé (optionnel)</Label>
+              <div className="relative mt-1">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Nom ou prénom..."
+                  value={patientSearch}
+                  onChange={e => setPatientSearch(e.target.value)}
+                  className="pl-8 text-sm"
+                />
+              </div>
+              {patientSearch.length >= 2 && searchResults.length > 0 && (
+                <div className="mt-1 border rounded-lg overflow-hidden bg-white shadow-sm">
+                  {searchResults.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setConsultForm(f => ({ ...f, firstName: p.firstName, lastName: p.lastName }));
+                        setPatientSearch("");
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-left border-b last:border-0"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-[var(--pulseboard-green-light)] flex items-center justify-center text-[var(--pulseboard-green)] text-xs font-bold shrink-0">
+                        {p.firstName[0]}{p.lastName[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{p.firstName} {p.lastName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{p.diagnosis || "Diagnostic en cours"} · {p.serviceName || "Service inconnu"}</p>
+                      </div>
+                      <span className={`text-xs font-semibold ${p.status === "critique" ? "text-[var(--pulseboard-red)]" : p.status === "modere" ? "text-[var(--pulseboard-amber)]" : "text-[var(--pulseboard-green)]"}`}>
+                        {p.status === "critique" ? "Critique" : p.status === "modere" ? "Modéré" : "Stable"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {patientSearch.length >= 2 && searchResults.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">Aucun patient trouvé — entrez le nom manuellement</p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Prénom</Label>

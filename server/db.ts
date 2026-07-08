@@ -197,6 +197,26 @@ export async function getPatientById(patientId: number) {
   return patient ?? null;
 }
 
+export async function searchPatients(query: string) {
+  const db = getDb();
+  const all = await db.select({
+    id: patients.id,
+    firstName: patients.firstName,
+    lastName: patients.lastName,
+    diagnosis: patients.diagnosis,
+    status: patients.status,
+    serviceId: patients.serviceId,
+    serviceName: services.name,
+  }).from(patients)
+    .leftJoin(services, eq(patients.serviceId, services.id))
+    .where(eq(patients.actualDischarge, null as any));
+  const q = query.toLowerCase();
+  return all.filter(p =>
+    p.firstName.toLowerCase().includes(q) ||
+    p.lastName.toLowerCase().includes(q)
+  ).slice(0, 10);
+}
+
 export async function createPatient(data: {
   firstName: string; lastName: string; serviceId: number; createdById: number;
   bedNumber?: number; status?: "stable" | "modere" | "critique";

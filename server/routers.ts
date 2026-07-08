@@ -132,6 +132,9 @@ export const appRouter = router({
     })).query(async ({ input }) => {
       return db.getPatientsByService(input.serviceId, input.filter || "tous");
     }),
+    search: protectedProcedure.input(z.object({ query: z.string().min(1) })).query(async ({ input }) => {
+      return db.searchPatients(input.query);
+    }),
     get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       return db.getPatientById(input.id);
     }),
