@@ -194,6 +194,71 @@ export const rotations = pgTable("rotations", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const personalPatients = pgTable("personal_patients", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  firstName: text("firstName").notNull(),
+  lastName: text("lastName").notNull(),
+  dateOfBirth: text("dateOfBirth"),
+  gender: text("gender").$type<"M" | "F">().default("M"),
+  phone: text("phone"),
+  status: text("status").$type<"stable" | "modere" | "critique">().default("stable").notNull(),
+  admissionDate: timestamp("admissionDate").defaultNow().notNull(),
+  diagnosis: text("diagnosis"),
+  allergies: text("allergies"),
+  antecedents: text("antecedents"),
+  serviceName: text("serviceName"),
+  bedNumber: integer("bedNumber"),
+  discharged: boolean("discharged").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const personalNotes = pgTable("personal_notes", {
+  id: serial("id").primaryKey(),
+  personalPatientId: integer("personalPatientId").notNull(),
+  userId: integer("userId").notNull(),
+  type: text("noteType").$type<"dar" | "soap" | "libre">().default("dar").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const personalTasks = pgTable("personal_tasks", {
+  id: serial("id").primaryKey(),
+  personalPatientId: integer("personalPatientId").notNull(),
+  userId: integer("userId").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  priority: text("priority").$type<"low" | "medium" | "high" | "urgent">().default("medium"),
+  status: text("taskStatus").$type<"pending" | "completed">().default("pending"),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const personalVitals = pgTable("personal_vitals", {
+  id: serial("id").primaryKey(),
+  personalPatientId: integer("personalPatientId").notNull(),
+  userId: integer("userId").notNull(),
+  temperature: text("temperature"),
+  bloodPressure: text("bloodPressure"),
+  heartRate: text("heartRate"),
+  respiratoryRate: text("respiratoryRate"),
+  oxygenSaturation: text("oxygenSaturation"),
+  gcs: text("gcs"),
+  pain: text("pain"),
+  notes: text("notes"),
+  recordedAt: timestamp("recordedAt").defaultNow().notNull(),
+});
+
+export const personalObservations = pgTable("personal_observations", {
+  id: serial("id").primaryKey(),
+  personalPatientId: integer("personalPatientId").notNull(),
+  userId: integer("userId").notNull(),
+  content: text("content").notNull(),
+  category: text("obsCategory").$type<"clinique" | "infirmier" | "evolution" | "autre">().default("clinique"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const competences = pgTable("competences", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),

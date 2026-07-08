@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, hospitals, services, serviceMembers, patients, patientTasks, alerts, serviceMessages, activityLog, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences } from "../drizzle/schema";
+import { InsertUser, users, hospitals, services, serviceMembers, patients, patientTasks, alerts, serviceMessages, activityLog, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
 
@@ -468,4 +468,106 @@ export async function getTasksByUser(userId: number) {
     .leftJoin(patients, eq(patientTasks.patientId, patients.id))
     .where(eq(patientTasks.createdById, userId));
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+// ===== PATIENTS PERSONNELS =====
+export async function getPersonalPatients(userId: number) {
+  const db = getDb();
+  return db.select().from(personalPatients)
+    .where(and(eq(personalPatients.userId, userId), eq(personalPatients.discharged, false)))
+    .orderBy(desc(personalPatients.createdAt));
+}
+
+export async function getPersonalPatient(id: number, userId: number) {
+  const db = getDb();
+  const [p] = await db.select().from(personalPatients)
+    .where(and(eq(personalPatients.id, id), eq(personalPatients.userId, userId)));
+  return p;
+}
+
+export async function createPersonalPatient(data: { userId: number; firstName: string; lastName: string; dateOfBirth?: string; gender?: "M" | "F"; phone?: string; status?: "stable" | "modere" | "critique"; diagnosis?: string; allergies?: string; antecedents?: string; serviceName?: string; bedNumber?: number }) {
+  const db = getDb();
+  const [{ id }] = await db.insert(personalPatients).values(data).returning({ id: personalPatients.id });
+  return id;
+}
+
+export async function updatePersonalPatient(id: number, data: { status?: "stable" | "modere" | "critique"; diagnosis?: string; discharged?: boolean }) {
+  const db = getDb();
+  await db.update(personalPatients).set({ ...data, updatedAt: new Date() }).where(eq(personalPatients.id, id));
+}
+
+export async function deletePersonalPatient(id: number) {
+  const db = getDb();
+  await db.delete(personalPatients).where(eq(personalPatients.id, id));
+}
+
+// Notes personnelles
+export async function getPersonalNotes(personalPatientId: number, userId: number) {
+  const db = getDb();
+  return db.select().from(personalNotes)
+    .where(and(eq(personalNotes.personalPatientId, personalPatientId), eq(personalNotes.userId, userId)))
+    .orderBy(desc(personalNotes.createdAt));
+}
+
+export async function createPersonalNote(data: { userId: number; personalPatientId: number; type: "dar" | "soap" | "libre"; content: string }) {
+  const db = getDb();
+  const [{ id }] = await db.insert(personalNotes).values(data).returning({ id: personalNotes.id });
+  return id;
+}
+
+export async function deletePersonalNote(id: number) {
+  const db = getDb();
+  await db.delete(personalNotes).where(eq(personalNotes.id, id));
+}
+
+// Tâches personnelles
+export async function getPersonalTasks(personalPatientId: number, userId: number) {
+  const db = getDb();
+  return db.select().from(personalTasks)
+    .where(and(eq(personalTasks.personalPatientId, personalPatientId), eq(personalTasks.userId, userId)))
+    .orderBy(asc(personalTasks.createdAt));
+}
+
+export async function createPersonalTask(data: { userId: number; personalPatientId: number; title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent" }) {
+  const db = getDb();
+  const [{ id }] = await db.insert(personalTasks).values(data).returning({ id: personalTasks.id });
+  return id;
+}
+
+export async function completePersonalTask(id: number) {
+  const db = getDb();
+  await db.update(personalTasks).set({ status: "completed", completedAt: new Date() }).where(eq(personalTasks.id, id));
+}
+
+export async function deletePersonalTask(id: number) {
+  const db = getDb();
+  await db.delete(personalTasks).where(eq(personalTasks.id, id));
+}
+
+// Vitaux personnels
+export async function getPersonalVitals(personalPatientId: number, userId: number) {
+  const db = getDb();
+  return db.select().from(personalVitals)
+    .where(and(eq(personalVitals.personalPatientId, personalPatientId), eq(personalVitals.userId, userId)))
+    .orderBy(desc(personalVitals.recordedAt));
+}
+
+export async function createPersonalVitals(data: { userId: number; personalPatientId: number; temperature?: string; bloodPressure?: string; heartRate?: string; respiratoryRate?: string; oxygenSaturation?: string; gcs?: string; pain?: string; notes?: string }) {
+  const db = getDb();
+  const [{ id }] = await db.insert(personalVitals).values(data).returning({ id: personalVitals.id });
+  return id;
+}
+
+// Observations personnelles
+export async function getPersonalObservations(personalPatientId: number, userId: number) {
+  const db = getDb();
+  return db.select().from(personalObservations)
+    .where(and(eq(personalObservations.personalPatientId, personalPatientId), eq(personalObservations.userId, userId)))
+    .orderBy(desc(personalObservations.createdAt));
+}
+
+export async function createPersonalObservation(data: { userId: number; personalPatientId: number; content: string; category?: "clinique" | "infirmier" | "evolution" | "autre" }) {
+  const db = getDb();
+  const [{ id }] = await db.insert(personalObservations).values(data).returning({ id: personalObservations.id });
+  return id;
 }

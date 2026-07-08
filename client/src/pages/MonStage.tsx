@@ -16,8 +16,9 @@ import {
   Stethoscope, Award, BarChart2, ListChecks, ChevronRight, LogOut
 } from "lucide-react";
 import { useState } from "react";
+import BottomNav from "@/components/BottomNav";
 
-type StageTab = "apercu" | "rotations" | "competences" | "notes";
+type StageTab = "apercu" | "rotations" | "competences" | "notes" | "patients";
 
 const CAT_LABELS: Record<string, string> = {
   geste_technique: "Geste technique",
@@ -44,11 +45,15 @@ export default function MonStage() {
   const [rotForm, setRotForm] = useState({ serviceName: "", hospitalName: "", supervisorName: "", startDate: "", endDate: "", notes: "" });
   const [compForm, setCompForm] = useState({ title: "", category: "geste_technique" as string, notes: "" });
 
+  const [showAdmitDialog, setShowAdmitDialog] = useState(false);
+  const [admitForm, setAdmitForm] = useState({ firstName: "", lastName: "", gender: "M" as "M" | "F", dateOfBirth: "", phone: "", status: "stable" as "stable" | "modere" | "critique", diagnosis: "", allergies: "", serviceName: "", bedNumber: "" });
+
   const utils = trpc.useUtils();
   const { data: stats } = trpc.personal.stats.useQuery();
   const { data: rotations = [] } = trpc.rotations.mine.useQuery();
   const { data: competences = [] } = trpc.competences.mine.useQuery();
   const { data: myNotes = [] } = trpc.personal.myNotes.useQuery();
+  const { data: personalPatients = [] } = trpc.personalPatients.list.useQuery();
 
   const createRotation = trpc.rotations.create.useMutation({
     onSuccess: () => { utils.rotations.mine.invalidate(); utils.personal.stats.invalidate(); toast.success("Rotation ajoutée"); setShowRotationDialog(false); setRotForm({ serviceName: "", hospitalName: "", supervisorName: "", startDate: "", endDate: "", notes: "" }); },
@@ -70,6 +75,14 @@ export default function MonStage() {
     onSuccess: () => { utils.competences.mine.invalidate(); utils.personal.stats.invalidate(); },
   });
 
+  const admitPersonalPatient = trpc.personalPatients.create.useMutation({
+    onSuccess: () => { utils.personalPatients.list.invalidate(); setShowAdmitDialog(false); setAdmitForm({ firstName: "", lastName: "", gender: "M", dateOfBirth: "", phone: "", status: "stable", diagnosis: "", allergies: "", serviceName: "", bedNumber: "" }); toast.success("Patient ajouté"); },
+  });
+
+  const deletePersonalPatient = trpc.personalPatients.delete.useMutation({
+    onSuccess: () => { utils.personalPatients.list.invalidate(); },
+  });
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-[var(--pulseboard-green)] border-t-transparent rounded-full animate-spin" />
@@ -80,9 +93,10 @@ export default function MonStage() {
 
   const tabs = [
     { key: "apercu" as StageTab, label: "Aperçu", icon: BarChart2 },
+    { key: "patients" as StageTab, label: "Patients", icon: ListChecks },
     { key: "rotations" as StageTab, label: "Rotations", icon: Stethoscope },
     { key: "competences" as StageTab, label: "Compétences", icon: Award },
-    { key: "notes" as StageTab, label: "Mes notes", icon: FileText },
+    { key: "notes" as StageTab, label: "Notes", icon: FileText },
   ];
 
   const validatedComps = competences.filter(c => c.validated).length;
@@ -321,6 +335,41 @@ export default function MonStage() {
           </div>
         )}
 
+        {/* MES PATIENTS PERSONNELS */}
+        {activeTab === "patients" && (
+          <div className="space-y-3">
+            <Button size="sm" onClick={() => setShowAdmitDialog(true)} className="w-full bg-[var(--pulseboard-green)] text-white hover:bg-[var(--pulseboard-green-dark)]">
+              <Plus className="w-3.5 h-3.5 mr-1" /> Admettre un patient
+            </Button>
+            {personalPatients.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-dashed border-border">
+                <ListChecks className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">Aucun patient personnel</p>
+                <p className="text-xs text-muted-foreground">Admettez un patient pour commencer votre suivi personnel.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {personalPatients.map(p => (
+                  <div key={p.id} onClick={() => navigate(`/mon-stage/patient/${p.id}`)}
+                    className="bg-white rounded-xl p-4 border border-border/50 cursor-pointer hover:border-[var(--pulseboard-green)]/30 transition-all flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-[var(--pulseboard-green-light)] flex items-center justify-center text-[var(--pulseboard-green)] text-xs font-bold shrink-0">
+                      {p.firstName[0]}{p.lastName[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{p.firstName} {p.lastName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{p.diagnosis || "Diagnostic en cours"} {p.serviceName ? `· ${p.serviceName}` : ""}</p>
+                    </div>
+                    <span className={`text-xs font-semibold ${p.status === "critique" ? "text-[var(--pulseboard-red)]" : p.status === "modere" ? "text-[var(--pulseboard-amber)]" : "text-[var(--pulseboard-green)]"}`}>
+                      {p.status === "critique" ? "Critique" : p.status === "modere" ? "Modéré" : "Stable"}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* MES NOTES */}
         {activeTab === "notes" && (
           <div className="space-y-3">
@@ -398,6 +447,76 @@ export default function MonStage() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog Admettre patient personnel */}
+      <Dialog open={showAdmitDialog} onOpenChange={setShowAdmitDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Admettre un patient (personnel)</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nom *</Label>
+                <Input placeholder="Nom de famille" value={admitForm.lastName} onChange={e => setAdmitForm(f => ({ ...f, lastName: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Prénom *</Label>
+                <Input placeholder="Prénom" value={admitForm.firstName} onChange={e => setAdmitForm(f => ({ ...f, firstName: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Genre</Label>
+                <Select value={admitForm.gender} onValueChange={v => setAdmitForm(f => ({ ...f, gender: v as "M" | "F" }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="M">Masculin</SelectItem>
+                    <SelectItem value="F">Féminin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Statut</Label>
+                <Select value={admitForm.status} onValueChange={v => setAdmitForm(f => ({ ...f, status: v as any }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stable">Stable</SelectItem>
+                    <SelectItem value="modere">Modéré</SelectItem>
+                    <SelectItem value="critique">Critique</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Diagnostic</Label>
+              <Input placeholder="Diagnostic principal" value={admitForm.diagnosis} onChange={e => setAdmitForm(f => ({ ...f, diagnosis: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Service</Label>
+                <Input placeholder="ex: Neurologie" value={admitForm.serviceName} onChange={e => setAdmitForm(f => ({ ...f, serviceName: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">N° de lit</Label>
+                <Input type="number" placeholder="ex: 5" value={admitForm.bedNumber} onChange={e => setAdmitForm(f => ({ ...f, bedNumber: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Allergies</Label>
+              <Input placeholder="ex: Pénicilline..." value={admitForm.allergies} onChange={e => setAdmitForm(f => ({ ...f, allergies: e.target.value }))} />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setShowAdmitDialog(false)}>Annuler</Button>
+              <Button
+                className="flex-1 bg-[var(--pulseboard-green)] text-white"
+                disabled={!admitForm.firstName || !admitForm.lastName || admitPersonalPatient.isPending}
+                onClick={() => admitPersonalPatient.mutate({ ...admitForm, bedNumber: admitForm.bedNumber ? Number(admitForm.bedNumber) : undefined })}
+              >
+                Admettre
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog Compétence */}
       <Dialog open={showCompDialog} onOpenChange={setShowCompDialog}>
         <DialogContent className="sm:max-w-md">
@@ -437,6 +556,7 @@ export default function MonStage() {
           </div>
         </DialogContent>
       </Dialog>
+      <BottomNav />
     </div>
   );
 }

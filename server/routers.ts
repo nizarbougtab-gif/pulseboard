@@ -461,6 +461,102 @@ export const appRouter = router({
       return db.getTasksByUser(ctx.user.id);
     }),
   }),
+
+  // Patients personnels (cahier de stage)
+  personalPatients: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getPersonalPatients(ctx.user.id);
+    }),
+    get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
+      return db.getPersonalPatient(input.id, ctx.user.id);
+    }),
+    create: protectedProcedure.input(z.object({
+      firstName: z.string().min(1),
+      lastName: z.string().min(1),
+      dateOfBirth: z.string().optional(),
+      gender: z.enum(["M", "F"]).default("M"),
+      phone: z.string().optional(),
+      status: z.enum(["stable", "modere", "critique"]).default("stable"),
+      diagnosis: z.string().optional(),
+      allergies: z.string().optional(),
+      antecedents: z.string().optional(),
+      serviceName: z.string().optional(),
+      bedNumber: z.number().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      return db.createPersonalPatient({ ...input, userId: ctx.user.id });
+    }),
+    update: protectedProcedure.input(z.object({
+      id: z.number(),
+      status: z.enum(["stable", "modere", "critique"]).optional(),
+      diagnosis: z.string().optional(),
+      discharged: z.boolean().optional(),
+    })).mutation(async ({ input }) => {
+      return db.updatePersonalPatient(input.id, input);
+    }),
+    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      return db.deletePersonalPatient(input.id);
+    }),
+    // Notes
+    notes: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
+      return db.getPersonalNotes(input.personalPatientId, ctx.user.id);
+    }),
+    addNote: protectedProcedure.input(z.object({
+      personalPatientId: z.number(),
+      type: z.enum(["dar", "soap", "libre"]).default("dar"),
+      content: z.string().min(1),
+    })).mutation(async ({ ctx, input }) => {
+      return db.createPersonalNote({ ...input, userId: ctx.user.id });
+    }),
+    deleteNote: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      return db.deletePersonalNote(input.id);
+    }),
+    // Tâches
+    tasks: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
+      return db.getPersonalTasks(input.personalPatientId, ctx.user.id);
+    }),
+    addTask: protectedProcedure.input(z.object({
+      personalPatientId: z.number(),
+      title: z.string().min(1),
+      description: z.string().optional(),
+      priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+    })).mutation(async ({ ctx, input }) => {
+      return db.createPersonalTask({ ...input, userId: ctx.user.id });
+    }),
+    completeTask: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      return db.completePersonalTask(input.id);
+    }),
+    deleteTask: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      return db.deletePersonalTask(input.id);
+    }),
+    // Vitaux
+    vitals: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
+      return db.getPersonalVitals(input.personalPatientId, ctx.user.id);
+    }),
+    addVitals: protectedProcedure.input(z.object({
+      personalPatientId: z.number(),
+      temperature: z.string().optional(),
+      bloodPressure: z.string().optional(),
+      heartRate: z.string().optional(),
+      respiratoryRate: z.string().optional(),
+      oxygenSaturation: z.string().optional(),
+      gcs: z.string().optional(),
+      pain: z.string().optional(),
+      notes: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      return db.createPersonalVitals({ ...input, userId: ctx.user.id });
+    }),
+    // Observations
+    observations: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
+      return db.getPersonalObservations(input.personalPatientId, ctx.user.id);
+    }),
+    addObservation: protectedProcedure.input(z.object({
+      personalPatientId: z.number(),
+      content: z.string().min(1),
+      category: z.enum(["clinique", "infirmier", "evolution", "autre"]).default("clinique"),
+    })).mutation(async ({ ctx, input }) => {
+      return db.createPersonalObservation({ ...input, userId: ctx.user.id });
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

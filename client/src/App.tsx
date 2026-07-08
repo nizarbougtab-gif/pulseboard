@@ -14,6 +14,7 @@ const PatientView = lazy(() => import("./pages/PatientView"));
 const Timeline = lazy(() => import("./pages/Timeline"));
 const Profile = lazy(() => import("./pages/Profile"));
 const MonStage = lazy(() => import("./pages/MonStage"));
+const PersonalPatientView = lazy(() => import("./pages/PersonalPatientView"));
 
 function LoadingFallback() {
   return (
@@ -38,6 +39,7 @@ function Router() {
         <Route path="/timeline/:serviceId" component={Timeline} />
         <Route path="/profile" component={Profile} />
         <Route path="/mon-stage" component={MonStage} />
+        <Route path="/mon-stage/patient/:id" component={PersonalPatientView} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
