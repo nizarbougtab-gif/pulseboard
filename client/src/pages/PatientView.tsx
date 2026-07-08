@@ -18,6 +18,7 @@ import {
   LayoutGrid, BookOpen, User
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import BottomNav from "@/components/BottomNav";
 
 type PatientTab = "suivi" | "taches" | "vitaux" | "obs" | "fichiers";
 
@@ -624,6 +625,7 @@ export default function PatientView() {
         </DialogContent>
       </Dialog>
       </div>
+      <BottomNav />
     </div>
   );
 }

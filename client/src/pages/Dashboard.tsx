@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import CreateServiceDialog from "@/components/CreateServiceDialog";
+import BottomNav from "@/components/BottomNav";
 
 export default function Dashboard() {
   const { user, medicalRole, isAuthenticated, loading, logout, can } = useAuth();
@@ -143,6 +144,7 @@ export default function Dashboard() {
         {/* Create Service Dialog */}
         <CreateServiceDialog open={showCreateService} onOpenChange={setShowCreateService} />
       </main>
+      <BottomNav />
     </div>
   );
 }

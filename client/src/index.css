@@ -231,4 +231,5 @@ button:active { transform: scale(0.97); }
 @media (max-width: 768px) {
   .medboard-sidebar { display: none; }
   .medboard-main { margin-left: 0; }
+  .medboard-main > div { padding-bottom: 4.5rem; }
 }

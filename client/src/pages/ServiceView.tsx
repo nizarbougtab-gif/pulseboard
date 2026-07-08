@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import AdmitPatientDialog from "@/components/AdmitPatientDialog";
+import BottomNav from "@/components/BottomNav";
 import ServiceChat from "@/components/ServiceChat";
 import RelevePanel from "@/components/RelevePanel";
 
@@ -523,6 +524,7 @@ export default function ServiceView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BottomNav serviceId={serviceId} />
     </div>
     </div>
   );
