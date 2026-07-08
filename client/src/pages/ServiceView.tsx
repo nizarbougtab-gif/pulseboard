@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import AdmitPatientDialog from "@/components/AdmitPatientDialog";
+import ConsultationDetailDialog from "@/components/ConsultationDetailDialog";
 import BottomNav from "@/components/BottomNav";
 import ServiceChat from "@/components/ServiceChat";
 import RelevePanel from "@/components/RelevePanel";
@@ -35,6 +36,7 @@ export default function ServiceView() {
   const [search, setSearch] = useState("");
   const [showAdmitDialog, setShowAdmitDialog] = useState(false);
   const [showConsultDialog, setShowConsultDialog] = useState(false);
+  const [selectedConsult, setSelectedConsult] = useState<any>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [consultForm, setConsultForm] = useState({ firstName: "", lastName: "", motif: "", notes: "" });
 
@@ -415,8 +417,10 @@ export default function ServiceView() {
                 </div>
               ) : (
                 consultations.map(c => (
-                  <div key={c.id} className="bg-white rounded-xl p-4 border border-border/50 flex items-center gap-4">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                  <div key={c.id}
+                    onClick={() => setSelectedConsult({ ...c, serviceId })}
+                    className="bg-white rounded-xl p-4 border border-border/50 flex items-center gap-4 cursor-pointer hover:border-[var(--pulseboard-green)]/30 transition-all">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
                       c.status === "vu" ? "bg-[var(--pulseboard-green-light)]" : c.status === "reporte" ? "bg-[var(--pulseboard-red-light)]" : "bg-[var(--pulseboard-amber-light)]"
                     }`}>
                       {c.status === "vu" ? (
@@ -427,43 +431,18 @@ export default function ServiceView() {
                         <Clock className="w-3.5 h-3.5 text-[var(--pulseboard-amber)]" />
                       )}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{c.patientFirstName} {c.patientLastName}</span>
-                        {c.status === "vu" && (
-                          <Badge variant="outline" className="text-[10px] text-[var(--pulseboard-green)] border-[var(--pulseboard-green)]/30">Vu</Badge>
-                        )}
-                        {c.status === "en_attente" && (
-                          <Badge variant="outline" className="text-[10px] text-[var(--pulseboard-amber)] border-[var(--pulseboard-amber)]/30">En attente</Badge>
-                        )}
-                        {c.status === "reporte" && (
-                          <Badge variant="outline" className="text-[10px] text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30">Reporté</Badge>
-                        )}
+                        <Badge variant="outline" className={`text-[10px] ${c.status === "vu" ? "text-[var(--pulseboard-green)] border-[var(--pulseboard-green)]/30" : c.status === "reporte" ? "text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" : "text-[var(--pulseboard-amber)] border-[var(--pulseboard-amber)]/30"}`}>
+                          {c.status === "vu" ? "Vu" : c.status === "reporte" ? "Reporté" : "En attente"}
+                        </Badge>
                       </div>
-                      <div className="text-xs text-muted-foreground">{c.motif}</div>
+                      <p className="text-xs text-muted-foreground truncate">{c.motif}</p>
+                      {c.rendezVous && <p className="text-xs text-[var(--pulseboard-amber)]">📅 RDV : {new Date(c.rendezVous).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>}
+                      {c.examensPara && <p className="text-xs text-[var(--pulseboard-green)] truncate">🔬 {c.examensPara.replace(/\|/g, ", ")}</p>}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {c.status !== "vu" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs text-[var(--pulseboard-green)]"
-                          onClick={() => updateConsultStatus.mutate({ id: c.id, status: "vu" })}
-                        >
-                          Marquer vu
-                        </Button>
-                      )}
-                      {c.status !== "reporte" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs text-[var(--pulseboard-red)]"
-                          onClick={() => updateConsultStatus.mutate({ id: c.id, status: "reporte" })}
-                        >
-                          Retirer
-                        </Button>
-                      )}
-                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </div>
                 ))
               )}
@@ -489,6 +468,14 @@ export default function ServiceView() {
 
       {/* Admit patient dialog */}
       <AdmitPatientDialog open={showAdmitDialog} onOpenChange={setShowAdmitDialog} serviceId={serviceId} />
+
+      {selectedConsult && (
+        <ConsultationDetailDialog
+          open={!!selectedConsult}
+          onOpenChange={(v) => { if (!v) setSelectedConsult(null); }}
+          consultation={selectedConsult}
+        />
+      )}
 
       {/* Add consultation dialog */}
       <Dialog open={showConsultDialog} onOpenChange={setShowConsultDialog}>

@@ -13,6 +13,7 @@ const actionIcons: Record<string, any> = {
   patient_updated: Edit,
   releve_generated: FileText,
   service_created: Activity,
+  member_joined: User,
 };
 
 const actionColors: Record<string, string> = {
@@ -21,6 +22,16 @@ const actionColors: Record<string, string> = {
   patient_updated: "bg-amber-100 text-amber-700",
   releve_generated: "bg-purple-100 text-purple-700",
   service_created: "bg-primary/10 text-primary",
+  member_joined: "bg-indigo-100 text-indigo-700",
+};
+
+const actionLabels: Record<string, string> = {
+  patient_admitted: "Patient admis",
+  patient_discharged: "Patient sorti",
+  patient_updated: "Dossier mis à jour",
+  releve_generated: "Relève générée",
+  service_created: "Service créé",
+  member_joined: "A rejoint l'équipe",
 };
 
 export default function Timeline() {
@@ -74,13 +85,21 @@ export default function Timeline() {
                     <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${colorClass}`}>
                       <Icon className="w-3.5 h-3.5" />
                     </div>
-                    <div className="flex-1 pb-4">
+                    <div className={`flex-1 pb-4 ${activity.action === "member_joined" ? "border-l-2 border-indigo-200 pl-3 ml-1 rounded" : ""}`}>
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="text-sm font-medium">{activity.details || activity.action}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            par {activity.userName || "Système"}
-                          </p>
+                          {activity.action === "member_joined" ? (
+                            <p className="text-sm font-semibold text-indigo-700">
+                              👋 {activity.userName || "Quelqu'un"} a rejoint l'équipe
+                            </p>
+                          ) : (
+                            <p className="text-sm font-medium">{activity.details || (actionLabels[activity.action] ?? activity.action)}</p>
+                          )}
+                          {activity.action !== "member_joined" && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              par {activity.userName || "Système"}
+                            </p>
+                          )}
                         </div>
                         <span className="text-xs text-muted-foreground shrink-0">
                           {new Date(activity.createdAt).toLocaleString("fr-FR", {

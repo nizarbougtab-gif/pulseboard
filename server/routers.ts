@@ -297,6 +297,24 @@ export const appRouter = router({
       await db.updateConsultationStatus(input.id, input.status);
       return { success: true };
     }),
+    updateDetails: protectedProcedure.input(z.object({
+      id: z.number(),
+      rapport: z.string().optional(),
+      examensPara: z.string().optional(),
+      rendezVous: z.string().optional(),
+      status: z.enum(["en_attente", "vu", "reporte"]).optional(),
+    })).mutation(async ({ input }) => {
+      const { id, rendezVous, ...rest } = input;
+      await db.updateConsultationDetails(id, { ...rest, rendezVous: rendezVous ? new Date(rendezVous) : undefined });
+      return { success: true };
+    }),
+    history: protectedProcedure.input(z.object({
+      serviceId: z.number(),
+      firstName: z.string(),
+      lastName: z.string(),
+    })).query(async ({ input }) => {
+      return db.getConsultationHistory(input.serviceId, input.firstName, input.lastName);
+    }),
   }),
 
   // Clinical Notes

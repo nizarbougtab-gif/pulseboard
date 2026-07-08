@@ -152,6 +152,7 @@ export async function joinService(serviceId: number, userId: number, medicalRole
     return { status: "pending" };
   }
   await db.insert(serviceMembers).values({ serviceId, userId, role: medicalRole === "medecin" ? "senior" : "junior" });
+  await logActivity({ serviceId, userId, action: "member_joined", details: null as any });
   return { status: "joined" };
 }
 
@@ -175,6 +176,7 @@ export async function resolveJoinRequest(requestId: number, approved: boolean, r
   await db.update(joinRequests).set({ status: approved ? "approved" : "rejected", resolvedAt: new Date(), resolvedById }).where(eq(joinRequests.id, requestId));
   if (approved) {
     await db.insert(serviceMembers).values({ serviceId: req.serviceId, userId: req.userId, role: "stagiaire" });
+    await logActivity({ serviceId: req.serviceId, userId: req.userId, action: "member_joined", details: null as any });
   }
 }
 
@@ -358,6 +360,23 @@ export async function createConsultation(data: { serviceId: number; patientFirst
 export async function updateConsultationStatus(id: number, status: "en_attente" | "vu" | "reporte") {
   const db = getDb();
   await db.update(consultations).set({ status, updatedAt: new Date() }).where(eq(consultations.id, id));
+}
+
+export async function updateConsultationDetails(id: number, data: { rapport?: string; examensPara?: string; rendezVous?: Date | null; status?: "en_attente" | "vu" | "reporte" }) {
+  const db = getDb();
+  await db.update(consultations).set({ ...data, updatedAt: new Date() }).where(eq(consultations.id, id));
+}
+
+export async function getConsultationHistory(serviceId: number, firstName: string, lastName: string) {
+  const db = getDb();
+  const all = await db.select().from(consultations)
+    .where(and(
+      eq(consultations.serviceId, serviceId),
+      eq(consultations.patientFirstName, firstName),
+      eq(consultations.patientLastName, lastName)
+    ))
+    .orderBy(desc(consultations.consultDate));
+  return all;
 }
 
 // ===== CLINICAL NOTES =====
