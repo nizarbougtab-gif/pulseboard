@@ -65,6 +65,12 @@ export async function getHospitals() {
   return db.select().from(hospitals).orderBy(asc(hospitals.name));
 }
 
+export async function createHospital(name: string, city: string) {
+  const db = getDb();
+  const [{ id }] = await db.insert(hospitals).values({ name, city }).returning({ id: hospitals.id });
+  return { id, name, city };
+}
+
 const SENEGAL_HOSPITALS = [
   { name: "CHU Aristide Le Dantec", city: "Dakar", address: "Avenue Pasteur, Dakar", phone: "+221 33 822 24 20" },
   { name: "CHU de Fann", city: "Dakar", address: "Avenue Cheikh Anta Diop, Dakar", phone: "+221 33 869 18 18" },

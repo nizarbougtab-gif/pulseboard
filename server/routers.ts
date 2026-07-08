@@ -78,6 +78,12 @@ export const appRouter = router({
     list: publicProcedure.query(async () => {
       return db.getHospitals();
     }),
+    create: protectedProcedure.input(z.object({
+      name: z.string().min(2),
+      city: z.string().optional(),
+    })).mutation(async ({ input }) => {
+      return db.createHospital(input.name, input.city || "Sénégal");
+    }),
   }),
 
   // User profile

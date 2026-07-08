@@ -23,37 +23,37 @@ export default function CreateServiceDialog({ open, onOpenChange }: Props) {
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [hospitalId, setHospitalId] = useState("");
+  const [customHospital, setCustomHospital] = useState("");
   const [totalBeds, setTotalBeds] = useState("20");
 
   const { data: hospitals } = trpc.hospitals.list.useQuery();
   const utils = trpc.useUtils();
+
+  const createHospital = trpc.hospitals.create.useMutation();
+
   const createService = trpc.services.create.useMutation({
     onSuccess: () => {
       utils.services.list.invalidate();
       toast.success("Service créé avec succès");
       onOpenChange(false);
-      setName("");
-      setSpecialty("");
-      setHospitalId("");
-      setTotalBeds("20");
+      setName(""); setSpecialty(""); setHospitalId(""); setCustomHospital(""); setTotalBeds("20");
     },
-    onError: (err) => {
-      toast.error("Erreur lors de la création du service");
-    },
+    onError: () => toast.error("Erreur lors de la création du service"),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !specialty || !hospitalId) {
+    if (!name || !specialty || (!hospitalId && !customHospital.trim())) {
       toast.error("Veuillez remplir tous les champs obligatoires");
       return;
     }
-    createService.mutate({
-      name,
-      specialty,
-      hospitalId: parseInt(hospitalId),
-      totalBeds: parseInt(totalBeds) || 20,
-    });
+    let finalHospitalId = parseInt(hospitalId);
+    if (hospitalId === "autre" && customHospital.trim()) {
+      const h = await createHospital.mutateAsync({ name: customHospital.trim() });
+      finalHospitalId = h.id;
+      utils.hospitals.list.invalidate();
+    }
+    createService.mutate({ name, specialty, hospitalId: finalHospitalId, totalBeds: parseInt(totalBeds) || 20 });
   };
 
   return (
@@ -91,8 +91,18 @@ export default function CreateServiceDialog({ open, onOpenChange }: Props) {
                 {hospitals?.map(h => (
                   <SelectItem key={h.id} value={h.id.toString()}>{h.name}</SelectItem>
                 ))}
+                <SelectItem value="autre">Autre établissement...</SelectItem>
               </SelectContent>
             </Select>
+            {hospitalId === "autre" && (
+              <Input
+                placeholder="Nom de l'établissement"
+                value={customHospital}
+                onChange={e => setCustomHospital(e.target.value)}
+                className="mt-2"
+                autoFocus
+              />
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="beds">Nombre de lits</Label>
