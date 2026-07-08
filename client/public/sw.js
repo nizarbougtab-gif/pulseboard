@@ -1,7 +1,7 @@
 // PulseBoard Service Worker
 // Gère le cache hors ligne pour les équipes médicales
 
-const CACHE_NAME = 'pulseboard-v1';
+const CACHE_NAME = 'pulseboard-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -53,20 +53,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets: cache first
+  // For static assets: network first, fallback to cache
   if (
     url.pathname.match(/\.(js|css|woff2?|png|svg|ico|json)$/) ||
     url.pathname.startsWith('/assets/')
   ) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetch(event.request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        });
-      })
+      fetch(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      }).catch(() => caches.match(event.request))
     );
     return;
   }
