@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import {
   Bed, Search, Plus, AlertCircle, Clock, ClipboardList,
   Users, CheckCircle, Activity, ArrowLeft,
-  Stethoscope, ChevronRight, LayoutGrid, BookOpen, User
+  Stethoscope, ChevronRight, LayoutGrid, BookOpen, User, Copy, Check, UserCheck, X
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import AdmitPatientDialog from "@/components/AdmitPatientDialog";
@@ -35,6 +35,7 @@ export default function ServiceView() {
   const [search, setSearch] = useState("");
   const [showAdmitDialog, setShowAdmitDialog] = useState(false);
   const [showConsultDialog, setShowConsultDialog] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [consultForm, setConsultForm] = useState({ firstName: "", lastName: "", motif: "", notes: "" });
 
   const { data: service, isLoading: serviceLoading } = trpc.services.get.useQuery({ id: serviceId }, { enabled: serviceId > 0 });
@@ -42,8 +43,17 @@ export default function ServiceView() {
   const { data: alerts = [] } = trpc.alerts.byService.useQuery({ serviceId, onlyActive: true }, { enabled: serviceId > 0 });
   const { data: consultations = [] } = trpc.consultations.list.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const { data: hospitals = [] } = trpc.hospitals.list.useQuery();
+  const { data: isChef } = trpc.membership.isChef.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const { data: pendingRequests = [] } = trpc.membership.pendingRequests.useQuery({ serviceId }, { enabled: !!isChef });
 
   const utils = trpc.useUtils();
+
+  const resolveRequest = trpc.membership.resolve.useMutation({
+    onSuccess: (_, vars) => {
+      utils.membership.pendingRequests.invalidate({ serviceId });
+      toast.success(vars.approved ? "Externe accepté" : "Demande refusée");
+    },
+  });
 
   const createConsultation = trpc.consultations.create.useMutation({
     onSuccess: () => {
@@ -180,11 +190,37 @@ export default function ServiceView() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Stethoscope className="w-4 h-4 text-[var(--pulseboard-green)]" />
               <h1 className="font-semibold text-base">{service.name}</h1>
+              {(service as any).code && isChef && (
+                <button
+                  onClick={() => { navigator.clipboard.writeText((service as any).code); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-xs font-mono text-muted-foreground transition-colors"
+                  title="Copier le code"
+                >
+                  {(service as any).code}
+                  {codeCopied ? <Check className="w-3 h-3 text-[var(--pulseboard-green)]" /> : <Copy className="w-3 h-3" />}
+                </button>
+              )}
+              {pendingRequests.length > 0 && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--pulseboard-amber-light)] text-[var(--pulseboard-amber)] text-xs font-semibold">
+                  <UserCheck className="w-3 h-3" /> {pendingRequests.length} demande{pendingRequests.length > 1 ? "s" : ""}
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">{hospital?.name} · {service.specialty} · {service.totalBeds} lits</p>
+            {pendingRequests.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {pendingRequests.map((r: any) => (
+                  <div key={r.id} className="flex items-center gap-2 text-xs bg-[var(--pulseboard-amber-light)] rounded-lg px-3 py-2">
+                    <span className="flex-1 font-medium">{r.userName} <span className="text-muted-foreground font-normal">demande à rejoindre</span></span>
+                    <button onClick={() => resolveRequest.mutate({ requestId: r.id, approved: true })} className="text-[var(--pulseboard-green)] hover:opacity-70"><Check className="w-4 h-4" /></button>
+                    <button onClick={() => resolveRequest.mutate({ requestId: r.id, approved: false })} className="text-[var(--pulseboard-red)] hover:opacity-70"><X className="w-4 h-4" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

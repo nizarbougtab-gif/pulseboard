@@ -107,9 +107,9 @@ export const appRouter = router({
       totalBeds: z.number().optional(),
       description: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
-      const id = await db.createService({ ...input, createdById: ctx.user.id });
+      const { id, code } = await db.createService({ ...input, createdById: ctx.user.id });
       await db.logActivity({ serviceId: id, userId: ctx.user.id, action: "service_created", details: `Service "${input.name}" créé` });
-      return { id };
+      return { id, code };
     }),
     members: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
       return db.getServiceMembers(input.serviceId);
@@ -459,6 +459,26 @@ export const appRouter = router({
     }),
     myTasks: protectedProcedure.query(async ({ ctx }) => {
       return db.getTasksByUser(ctx.user.id);
+    }),
+  }),
+
+  // Système de codes de service
+  membership: router({
+    join: protectedProcedure.input(z.object({ code: z.string().min(4) })).mutation(async ({ ctx, input }) => {
+      const service = await db.getServiceByCode(input.code);
+      if (!service) throw new Error("Code invalide");
+      const medicalRole = (ctx.user as any).medicalRole ?? "externe";
+      return db.joinService(service.id, ctx.user.id, medicalRole);
+    }),
+    pendingRequests: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+      return db.getPendingRequests(input.serviceId);
+    }),
+    resolve: protectedProcedure.input(z.object({ requestId: z.number(), approved: z.boolean() })).mutation(async ({ ctx, input }) => {
+      return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id);
+    }),
+    isChef: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      const members = await db.getServiceMembers(input.serviceId);
+      return members.some((m: any) => m.userId === ctx.user.id && m.role === "chef");
     }),
   }),
 

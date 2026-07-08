@@ -38,8 +38,19 @@ export const services = pgTable("services", {
   createdById: integer("createdById").notNull(),
   totalBeds: integer("totalBeds").default(20),
   description: text("description"),
+  code: text("code").unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const joinRequests = pgTable("join_requests", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("serviceId").notNull(),
+  userId: integer("userId").notNull(),
+  status: text("status").$type<"pending" | "approved" | "rejected">().default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedById: integer("resolvedById"),
 });
 
 export const serviceMembers = pgTable("service_members", {

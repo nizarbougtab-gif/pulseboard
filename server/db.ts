@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, hospitals, services, serviceMembers, patients, patientTasks, alerts, serviceMessages, activityLog, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
 
@@ -114,11 +114,68 @@ export async function getServiceById(serviceId: number) {
   return service ?? null;
 }
 
+function generateServiceCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
 export async function createService(data: { name: string; specialty: string; hospitalId: number; createdById: number; totalBeds?: number; description?: string }) {
   const db = getDb();
-  const [{ id }] = await db.insert(services).values(data).returning({ id: services.id });
+  const code = generateServiceCode();
+  const [{ id }] = await db.insert(services).values({ ...data, code }).returning({ id: services.id });
   await db.insert(serviceMembers).values({ serviceId: id, userId: data.createdById, role: "chef" });
-  return id;
+  return { id, code };
+}
+
+export async function getServiceByCode(code: string) {
+  const db = getDb();
+  const [s] = await db.select().from(services).where(eq(services.code, code.toUpperCase()));
+  return s;
+}
+
+export async function isServiceMember(serviceId: number, userId: number) {
+  const db = getDb();
+  const [m] = await db.select().from(serviceMembers).where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.userId, userId)));
+  return !!m;
+}
+
+export async function joinService(serviceId: number, userId: number, medicalRole: string) {
+  const db = getDb();
+  const alreadyMember = await isServiceMember(serviceId, userId);
+  if (alreadyMember) return { status: "already_member" };
+  if (medicalRole === "externe") {
+    const [existing] = await db.select().from(joinRequests).where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.userId, userId)));
+    if (existing) return { status: "pending" };
+    await db.insert(joinRequests).values({ serviceId, userId });
+    return { status: "pending" };
+  }
+  await db.insert(serviceMembers).values({ serviceId, userId, role: medicalRole === "medecin" ? "senior" : "junior" });
+  return { status: "joined" };
+}
+
+export async function getPendingRequests(serviceId: number) {
+  const db = getDb();
+  return db.select({
+    id: joinRequests.id,
+    userId: joinRequests.userId,
+    userName: users.name,
+    userEmail: users.email,
+    createdAt: joinRequests.createdAt,
+  }).from(joinRequests)
+    .leftJoin(users, eq(joinRequests.userId, users.id))
+    .where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.status, "pending")));
+}
+
+export async function resolveJoinRequest(requestId: number, approved: boolean, resolvedById: number) {
+  const db = getDb();
+  const [req] = await db.select().from(joinRequests).where(eq(joinRequests.id, requestId));
+  if (!req) return;
+  await db.update(joinRequests).set({ status: approved ? "approved" : "rejected", resolvedAt: new Date(), resolvedById }).where(eq(joinRequests.id, requestId));
+  if (approved) {
+    await db.insert(serviceMembers).values({ serviceId: req.serviceId, userId: req.userId, role: "stagiaire" });
+  }
 }
 
 // ===== PATIENTS =====

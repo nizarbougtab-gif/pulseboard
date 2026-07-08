@@ -2,14 +2,17 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { ROLE_LABELS, ROLE_COLORS, type MedicalRole } from "@/lib/permissions";
 import {
   Plus, Bed, LogOut, User, ChevronRight,
-  Stethoscope, LayoutGrid, BookOpen, Users, AlertCircle, GraduationCap
+  Stethoscope, LayoutGrid, BookOpen, Users, AlertCircle, GraduationCap, UserPlus, Copy, Check
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import CreateServiceDialog from "@/components/CreateServiceDialog";
 import BottomNav from "@/components/BottomNav";
 
@@ -17,6 +20,20 @@ export default function Dashboard() {
   const { user, medicalRole, isAuthenticated, loading, logout, can } = useAuth();
   const [, navigate] = useLocation();
   const [showCreateService, setShowCreateService] = useState(false);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [copied, setCopied] = useState<number | null>(null);
+
+  const joinService = trpc.membership.join.useMutation({
+    onSuccess: (result) => {
+      if (result.status === "joined") { toast.success("Vous avez rejoint le service !"); setShowJoinDialog(false); setJoinCode(""); utils.services.list.invalidate(); }
+      else if (result.status === "pending") { toast.info("Demande envoyée — en attente d'approbation du chef de service"); setShowJoinDialog(false); setJoinCode(""); }
+      else if (result.status === "already_member") { toast.info("Vous êtes déjà membre de ce service"); }
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const utils = trpc.useUtils();
 
   if (loading) {
     return (
@@ -127,22 +144,47 @@ export default function Dashboard() {
           {/* Services Section */}
           <div className="flex items-center justify-between mb-5 mt-8">
             <h2 className="font-semibold text-base">Mes services</h2>
-            {can("service.create") && (
-              <Button
-                size="sm"
-                className="bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white h-8"
-                onClick={() => setShowCreateService(true)}
-              >
-                <Plus className="w-3.5 h-3.5 mr-1" /> Nouveau service
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="h-8" onClick={() => setShowJoinDialog(true)}>
+                <UserPlus className="w-3.5 h-3.5 mr-1" /> Rejoindre
               </Button>
-            )}
+              {can("service.create") && (
+                <Button size="sm" className="bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white h-8" onClick={() => setShowCreateService(true)}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Nouveau
+                </Button>
+              )}
+            </div>
           </div>
 
           <ServicesList />
         </div>
 
-        {/* Create Service Dialog */}
         <CreateServiceDialog open={showCreateService} onOpenChange={setShowCreateService} />
+
+        {/* Join Service Dialog */}
+        <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader><DialogTitle>Rejoindre un service</DialogTitle></DialogHeader>
+            <p className="text-sm text-muted-foreground">Entre le code du service fourni par le chef de service.</p>
+            <Input
+              placeholder="ex: ORL-4829"
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              className="text-center text-lg tracking-widest font-mono"
+              maxLength={8}
+            />
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowJoinDialog(false)}>Annuler</Button>
+              <Button
+                className="bg-[var(--pulseboard-green)] text-white"
+                disabled={joinCode.length < 4 || joinService.isPending}
+                onClick={() => joinService.mutate({ code: joinCode })}
+              >
+                Rejoindre
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
       <BottomNav />
     </div>
