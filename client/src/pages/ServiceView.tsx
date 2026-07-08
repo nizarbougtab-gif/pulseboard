@@ -56,6 +56,10 @@ export default function ServiceView() {
     { enabled: patientSearch.length >= 2 }
   );
 
+  const leaveService = trpc.services.leave.useMutation({
+    onSuccess: () => { utils.services.list.invalidate(); navigate("/dashboard"); toast.success("Vous avez quitté le service"); },
+  });
+
   const resolveRequest = trpc.membership.resolve.useMutation({
     onSuccess: (_, vars) => {
       utils.membership.pendingRequests.invalidate({ serviceId });
@@ -187,7 +191,17 @@ export default function ServiceView() {
             </div>
           </div>
         </div>
-        <div className="px-4 py-3 text-[10px] text-muted-foreground border-t border-border/50">MEDBOARD &copy; 2026</div>
+        <div className="p-3 border-t border-border/50">
+          {!isChef && (
+            <button
+              onClick={() => { if (confirm("Quitter ce service ?")) leaveService.mutate({ serviceId }); }}
+              className="w-full text-xs text-muted-foreground hover:text-[var(--pulseboard-red)] py-1.5 transition-colors"
+            >
+              Quitter le service
+            </button>
+          )}
+        </div>
+        <div className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border/50">MEDBOARD &copy; 2026</div>
       </aside>
 
       {/* Main content */}
@@ -266,7 +280,7 @@ export default function ServiceView() {
       <div className="border-b bg-white px-6 flex items-center gap-6 shrink-0">
         {[
           { key: "lits" as TabType, label: "Lits", icon: Bed },
-          { key: "garde" as TabType, label: "Garde", icon: Clock },
+          { key: "garde" as TabType, label: "Messages", icon: Clock },
           { key: "consult" as TabType, label: "Consult.", icon: ClipboardList },
           { key: "releve" as TabType, label: "Relève", icon: ClipboardList },
         ].map(tab => (

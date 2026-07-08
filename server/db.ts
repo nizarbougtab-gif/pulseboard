@@ -364,6 +364,11 @@ export async function addServiceMember(serviceId: number, userId: number, role?:
   await db.insert(serviceMembers).values({ serviceId, userId, role: role || "junior" });
 }
 
+export async function leaveService(serviceId: number, userId: number) {
+  const db = getDb();
+  await db.delete(serviceMembers).where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.userId, userId)));
+}
+
 // ===== USER PROFILE =====
 export async function updateUserProfile(userId: number, data: { medicalRole?: "externe" | "interne" | "resident" | "medecin"; hospitalId?: number; name?: string }) {
   const db = getDb();

@@ -14,13 +14,13 @@ import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import {
   ArrowLeft, AlertTriangle, FileText, ListChecks, Heart,
-  Eye, FolderOpen, Plus, CheckCircle, Clock, MoreVertical,
-  LayoutGrid, BookOpen, User
+  Eye, Plus, CheckCircle, Clock, MoreVertical,
+  LayoutGrid, BookOpen, User, Loader2
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BottomNav from "@/components/BottomNav";
 
-type PatientTab = "suivi" | "taches" | "vitaux" | "obs" | "fichiers";
+type PatientTab = "suivi" | "taches" | "vitaux" | "obs";
 
 export default function PatientView() {
   const { id } = useParams<{ id: string }>();
@@ -269,7 +269,6 @@ export default function PatientView() {
           { key: "taches" as PatientTab, label: "Tâches", icon: ListChecks },
           { key: "vitaux" as PatientTab, label: "Vitaux", icon: Heart },
           { key: "obs" as PatientTab, label: "Obs", icon: Eye },
-          { key: "fichiers" as PatientTab, label: "Fichiers", icon: FolderOpen },
         ].map(tab => (
           <button
             key={tab.key}
@@ -361,10 +360,13 @@ export default function PatientView() {
                     <button
                       onClick={() => updateTaskStatus.mutate({ id: task.id, status: task.status === "completed" ? "pending" : "completed" })}
                       className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                        task.status === "completed" ? "bg-[var(--pulseboard-green)] border-[var(--pulseboard-green)]" : "border-gray-300 hover:border-[var(--pulseboard-green)]"
+                        task.status === "completed" ? "bg-[var(--pulseboard-green)] border-[var(--pulseboard-green)]" :
+                        task.status === "in_progress" ? "bg-[var(--pulseboard-amber)] border-[var(--pulseboard-amber)]" :
+                        "border-gray-300 hover:border-[var(--pulseboard-green)]"
                       }`}
                     >
                       {task.status === "completed" && <CheckCircle className="w-3 h-3 text-white" />}
+                      {task.status === "in_progress" && <Loader2 className="w-3 h-3 text-white animate-spin" />}
                     </button>
                     <div className="flex-1">
                       <div className={`text-sm font-medium ${task.status === "completed" ? "line-through text-muted-foreground" : ""}`}>{task.title}</div>
@@ -373,6 +375,14 @@ export default function PatientView() {
                         {task.priority === "urgent" && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--pulseboard-red-light)] text-[var(--pulseboard-red)] font-medium">Urgent</span>}
                         {task.priority === "high" && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--pulseboard-amber-light)] text-[var(--pulseboard-amber)] font-medium">Haute</span>}
                         {task.dueDate && <span className="text-[10px] text-muted-foreground">{new Date(task.dueDate).toLocaleDateString("fr-FR")}</span>}
+                        {task.status === "pending" && (
+                          <button onClick={() => updateTaskStatus.mutate({ id: task.id, status: "in_progress" })} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)] hover:opacity-70">
+                            Commencer
+                          </button>
+                        )}
+                        {task.status === "in_progress" && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--pulseboard-amber-light)] text-[var(--pulseboard-amber)] font-medium">En cours</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -458,21 +468,6 @@ export default function PatientView() {
           </div>
         )}
 
-        {/* FICHIERS TAB */}
-        {activeTab === "fichiers" && (
-          <div className="max-w-2xl mx-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-sm">Fichiers et documents</h2>
-            </div>
-            <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white border border-border/50 flex items-center justify-center">
-                <FolderOpen className="w-7 h-7 text-muted-foreground/50" />
-              </div>
-              <p className="text-sm text-muted-foreground">Aucun fichier attaché</p>
-              <p className="text-xs text-muted-foreground mt-1">Les fichiers joints (résultats d'examens, imagerie) apparaîtront ici.</p>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Note Dialog */}

@@ -192,6 +192,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
             disabled={updateDetails.isPending}
             onClick={() => updateDetails.mutate({
               id: consultation.id,
+              serviceId: consultation.serviceId,
               rapport: rapport || undefined,
               examensPara: buildExamensPara() || undefined,
               rendezVous: rendezVous || undefined,

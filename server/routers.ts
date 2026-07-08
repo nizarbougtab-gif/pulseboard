@@ -128,6 +128,10 @@ export const appRouter = router({
       await db.addServiceMember(input.serviceId, input.userId, input.role);
       return { success: true };
     }),
+    leave: protectedProcedure.input(z.object({ serviceId: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.leaveService(input.serviceId, ctx.user.id);
+      return { success: true };
+    }),
   }),
 
   // Patients
@@ -164,7 +168,7 @@ export const appRouter = router({
       const id = await db.createPatient({
         ...rest,
         createdById: ctx.user.id,
-        expectedDischarge: expectedDischarge ? new Date(expectedDischarge) : undefined,
+        expectedDischarge: expectedDischarge || undefined,
       });
       await db.logActivity({ serviceId: input.serviceId, patientId: id, userId: ctx.user.id, action: "patient_admitted", details: `${input.firstName} ${input.lastName} admis(e)` });
       // Auto-create alerts
@@ -189,8 +193,8 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       const { id, expectedDischarge, actualDischarge, ...rest } = input;
       const updateData: any = { ...rest };
-      if (expectedDischarge !== undefined) updateData.expectedDischarge = expectedDischarge ? new Date(expectedDischarge) : null;
-      if (actualDischarge !== undefined) updateData.actualDischarge = actualDischarge ? new Date(actualDischarge) : null;
+      if (expectedDischarge !== undefined) updateData.expectedDischarge = expectedDischarge || null;
+      if (actualDischarge !== undefined) updateData.actualDischarge = actualDischarge || null;
       await db.updatePatient(id, updateData);
       const patient = await db.getPatientById(id);
       if (patient) {
@@ -203,7 +207,7 @@ export const appRouter = router({
       return { success: true };
     }),
     discharge: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      await db.updatePatient(input.id, { actualDischarge: new Date() });
+      await db.updatePatient(input.id, { actualDischarge: new Date().toISOString() });
       const patient = await db.getPatientById(input.id);
       if (patient) {
         await db.logActivity({ serviceId: patient.serviceId, patientId: input.id, userId: ctx.user.id, action: "patient_discharged", details: `${patient.firstName} ${patient.lastName} sorti(e)` });
@@ -233,7 +237,7 @@ export const appRouter = router({
       const id = await db.createTask({
         ...rest,
         createdById: ctx.user.id,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
+        dueDate: dueDate || undefined,
       });
       return { id };
     }),
@@ -242,7 +246,7 @@ export const appRouter = router({
       status: z.enum(["pending", "in_progress", "completed", "overdue"]),
     })).mutation(async ({ input }) => {
       const data: any = { status: input.status };
-      if (input.status === "completed") data.completedAt = new Date();
+      if (input.status === "completed") data.completedAt = new Date().toISOString();
       await db.updateTask(input.id, data);
       return { success: true };
     }),
@@ -312,9 +316,13 @@ export const appRouter = router({
       examensPara: z.string().optional(),
       rendezVous: z.string().optional(),
       status: z.enum(["en_attente", "vu", "reporte"]).optional(),
-    })).mutation(async ({ input }) => {
-      const { id, rendezVous, ...rest } = input;
+      serviceId: z.number().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { id, rendezVous, serviceId, ...rest } = input;
       await db.updateConsultationDetails(id, { ...rest, rendezVous: rendezVous ? new Date(rendezVous) : undefined });
+      if (serviceId) {
+        await db.logActivity({ serviceId, userId: ctx.user.id, action: "consultation_updated", details: "Consultation mise à jour" });
+      }
       return { success: true };
     }),
     history: protectedProcedure.input(z.object({
