@@ -4,9 +4,14 @@ import { LayoutGrid, BookOpen, GraduationCap, User } from "lucide-react";
 export default function BottomNav({ serviceId }: { serviceId?: number }) {
   const [location, navigate] = useLocation();
 
+  if (serviceId) {
+    localStorage.setItem("lastServiceId", String(serviceId));
+  }
+  const lastServiceId = serviceId || localStorage.getItem("lastServiceId");
+
   const items = [
     { icon: LayoutGrid, label: "Services", path: "/dashboard" },
-    { icon: BookOpen, label: "Journal", path: serviceId ? `/timeline/${serviceId}` : "/dashboard" },
+    { icon: BookOpen, label: "Journal", path: lastServiceId ? `/timeline/${lastServiceId}` : "/dashboard" },
     { icon: GraduationCap, label: "Mon Stage", path: "/mon-stage" },
     { icon: User, label: "Profil", path: "/profile" },
   ];
