@@ -466,8 +466,8 @@ export default function ServiceView() {
                           {c.status === "vu" ? "Vu" : c.status === "reporte" ? "Reporté" : "En attente"}
                         </Badge>
                         {c.disposition && (
-                          <Badge className={`text-[10px] ${c.disposition === "hospitalise" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]"}`}>
-                            {c.disposition === "hospitalise" ? "Hospitalisé" : "Référé"}
+                          <Badge className={`text-[10px] ${c.disposition === "hospitalise" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : c.disposition === "refere" ? "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]" : "bg-gray-100 text-gray-700"}`}>
+                            {c.disposition === "hospitalise" ? "Hospitalisé" : c.disposition === "refere" ? "Référé" : "Sorti"}
                           </Badge>
                         )}
                       </div>
