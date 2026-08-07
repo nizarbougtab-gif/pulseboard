@@ -251,6 +251,39 @@ export const appRouter = router({
       }
       return { success: true };
     }),
+    assignBed: protectedProcedure.input(z.object({
+      id: z.number(),
+      bedNumber: z.number().int().positive(),
+    })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.id, ctx.user.id);
+      if (patient.actualDischarge) {
+        throw new TRPCError({ code: "CONFLICT", message: "Impossible d'attribuer un lit à un patient sorti" });
+      }
+
+      const service = await db.getServiceById(patient.serviceId);
+      if (!service) throw new TRPCError({ code: "NOT_FOUND", message: "Service introuvable" });
+      const totalBeds = service.totalBeds ?? 0;
+      if (input.bedNumber > totalBeds) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Le service possède seulement ${totalBeds} lits` });
+      }
+
+      const activePatients = await db.getPatientsByService(patient.serviceId, "tous");
+      const occupant = activePatients.find(other => other.id !== patient.id && other.bedNumber === input.bedNumber);
+      if (occupant) {
+        throw new TRPCError({ code: "CONFLICT", message: `Le lit ${input.bedNumber} est déjà occupé par ${occupant.firstName} ${occupant.lastName}` });
+      }
+
+      await db.updatePatient(patient.id, { bedNumber: input.bedNumber });
+      await db.resolvePatientAlerts(patient.id, "no_bed", ctx.user.id);
+      await db.logActivity({
+        serviceId: patient.serviceId,
+        patientId: patient.id,
+        userId: ctx.user.id,
+        action: "bed_assigned",
+        details: `Lit ${input.bedNumber} attribué à ${patient.firstName} ${patient.lastName}`,
+      });
+      return { success: true };
+    }),
     discharge: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       const patient = await requirePatientAccess(input.id, ctx.user.id);
       if (patient.actualDischarge) throw new TRPCError({ code: "CONFLICT", message: "Ce patient a déjà quitté le service" });
