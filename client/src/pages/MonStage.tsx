@@ -37,7 +37,10 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 export default function MonStage() {
-  const { user, medicalRole, isAuthenticated, loading, logout } = useAuth();
+  const { user, medicalRole, isAuthenticated, loading, logout } = useAuth({
+    redirectOnUnauthenticated: true,
+    redirectPath: getLoginUrl("/mon-stage"),
+  });
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState<StageTab>("apercu");
   const [showRotationDialog, setShowRotationDialog] = useState(false);
@@ -89,7 +92,7 @@ export default function MonStage() {
     </div>
   );
 
-  if (!isAuthenticated) { window.location.href = getLoginUrl(); return null; }
+  if (!isAuthenticated) return null;
 
   const tabs = [
     { key: "apercu" as StageTab, label: "Aperçu", icon: BarChart2 },

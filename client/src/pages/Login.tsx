@@ -149,7 +149,9 @@ export default function Login() {
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       required
-                      minLength={6}
+                      minLength={10}
+                      maxLength={128}
+                      autoComplete="new-password"
                     />
                   </div>
                   <div className="space-y-2">

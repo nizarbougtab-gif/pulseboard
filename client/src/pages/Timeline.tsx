@@ -37,7 +37,10 @@ const actionLabels: Record<string, string> = {
 export default function Timeline() {
   const params = useParams<{ serviceId: string }>();
   const serviceId = parseInt(params.serviceId || "0");
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth({
+    redirectOnUnauthenticated: true,
+    redirectPath: getLoginUrl(`/timeline/${serviceId}`),
+  });
   const [, navigate] = useLocation();
 
   const { data: activities, isLoading } = trpc.activity.byService.useQuery({ serviceId }, { enabled: serviceId > 0 });
@@ -48,7 +51,6 @@ export default function Timeline() {
   }
 
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl(`/timeline/${serviceId}`);
     return null;
   }
 

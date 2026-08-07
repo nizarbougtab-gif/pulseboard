@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pulseboard
+      POSTGRES_USER: pulseboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définissez POSTGRES_PASSWORD dans .env}
+    volumes:
+      - pulseboard_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulseboard -d pulseboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://pulseboard:${POSTGRES_PASSWORD}@db:5432/pulseboard
+      JWT_SECRET: ${JWT_SECRET:?Définissez JWT_SECRET dans .env}
+    ports:
+      - "3000:3000"
+
+volumes:
+  pulseboard_postgres:

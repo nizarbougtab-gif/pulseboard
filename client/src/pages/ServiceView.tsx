@@ -29,7 +29,10 @@ export default function ServiceView() {
   const { id } = useParams<{ id: string }>();
   const serviceId = parseInt(id || "0");
   const [, navigate] = useLocation();
-  const { user, isAuthenticated, loading, can } = useAuth();
+  const { user, isAuthenticated, loading, can } = useAuth({
+    redirectOnUnauthenticated: true,
+    redirectPath: getLoginUrl(`/service/${serviceId}`),
+  });
 
   const [activeTab, setActiveTab] = useState<TabType>("lits");
   const [filter, setFilter] = useState<FilterType>("tous");
@@ -126,7 +129,6 @@ export default function ServiceView() {
   }
 
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl(`/service/${serviceId}`);
     return null;
   }
 
@@ -615,4 +617,3 @@ export default function ServiceView() {
     </div>
   );
 }
-

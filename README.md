@@ -13,7 +13,7 @@ PulseBoard est une Progressive Web App (PWA) qui aide les médecins, internes, r
 - **Relève automatique** — Générée par priorité, copiable pour WhatsApp, exportable en PDF
 - **Messagerie d'équipe** — Chat sécurisé lié au service, logs cliniques horodatés
 - **Alertes** — DPS manquante, allergie non documentée, sortie prévue
-- **PWA** — Installable sur smartphone, fonctionne hors ligne
+- **PWA** — Installable sur smartphone ; l'interface reste accessible hors ligne et les données cliniques nécessitent une connexion sécurisée
 
 ---
 
@@ -83,6 +83,16 @@ Le serveur démarre sur `http://localhost:3000`. Les hôpitaux sénégalais sont
 
 ## Déploiement
 
+### Docker (application complète + PostgreSQL)
+
+```bash
+cp .env.example .env
+# Remplacer JWT_SECRET et POSTGRES_PASSWORD par des secrets longs et aléatoires
+docker compose up --build -d
+```
+
+L'application répond sur `http://localhost:3000` et son état peut être contrôlé sur `/healthz`.
+
 ### Vercel / Netlify (Frontend uniquement)
 
 ```bash
@@ -131,7 +141,7 @@ PulseBoard est préconfiguré avec les établissements sénégalais de référen
 1. Ouvrir l'application dans Chrome mobile
 2. Appuyer sur "Ajouter à l'écran d'accueil"
 3. L'icône PulseBoard apparaît sur l'écran d'accueil
-4. L'application fonctionne hors ligne pour la consultation des données mises en cache
+4. L'interface peut s'ouvrir hors ligne ; reconnectez-vous pour consulter ou modifier les données cliniques
 
 ---
 

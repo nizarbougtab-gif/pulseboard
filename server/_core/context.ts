@@ -19,7 +19,11 @@ export async function createContext(opts: CreateExpressContextOptions): Promise<
     const token = cookies["pb_session"];
     if (token && ENV.cookieSecret) {
       const secret = new TextEncoder().encode(ENV.cookieSecret);
-      const { payload } = await jwtVerify(token, secret);
+      const { payload } = await jwtVerify(token, secret, {
+        algorithms: ["HS256"],
+        issuer: "pulseboard",
+        audience: "pulseboard-web",
+      });
       if (payload.openId) {
         user = (await getUserByOpenId(payload.openId as string)) ?? null;
       }
