@@ -157,7 +157,7 @@ export const consultations = pgTable("consultations", {
   rapport: text("rapport"),
   examensPara: text("examensPara"),
   rendezVous: timestamp("rendezVous"),
-  disposition: text("disposition").$type<"hospitalise" | "refere">(),
+  disposition: text("disposition").$type<"hospitalise" | "refere" | "sortie">(),
   linkedPatientId: integer("linkedPatientId"),
   referralDestination: text("referralDestination"),
   referralReason: text("referralReason"),
