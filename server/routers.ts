@@ -464,6 +464,26 @@ export const appRouter = router({
       });
       return { patientId };
     }),
+    discharge: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.id);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
+      if (consultation.disposition || consultation.linkedPatientId) {
+        throw new TRPCError({ code: "CONFLICT", message: "Une orientation a déjà été enregistrée pour cette consultation" });
+      }
+      await db.updateConsultationDetails(input.id, {
+        disposition: "sortie",
+        status: "vu",
+        closedAt: new Date(),
+      });
+      await db.logActivity({
+        serviceId: consultation.serviceId,
+        userId: ctx.user.id,
+        action: "consultation_discharged",
+        details: `${consultation.patientFirstName} ${consultation.patientLastName} sorti(e) après consultation`,
+      });
+      return { success: true };
+    }),
     refer: protectedProcedure.input(z.object({
       id: z.number(),
       destination: z.string().trim().min(2).max(200),
