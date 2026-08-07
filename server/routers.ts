@@ -253,8 +253,39 @@ export const appRouter = router({
     }),
     discharge: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       const patient = await requirePatientAccess(input.id, ctx.user.id);
-      await db.updatePatient(input.id, { actualDischarge: new Date().toISOString() });
+      if (patient.actualDischarge) throw new TRPCError({ code: "CONFLICT", message: "Ce patient a déjà quitté le service" });
+      await db.updatePatient(input.id, {
+        actualDischarge: new Date().toISOString(),
+        dischargeDisposition: "sortie",
+        referralDestination: null,
+        referralReason: null,
+        referralDate: null,
+      });
       await db.logActivity({ serviceId: patient.serviceId, patientId: input.id, userId: ctx.user.id, action: "patient_discharged", details: `${patient.firstName} ${patient.lastName} sorti(e)` });
+      return { success: true };
+    }),
+    refer: protectedProcedure.input(z.object({
+      id: z.number(),
+      destination: z.string().trim().min(2).max(200),
+      reason: z.string().trim().min(2).max(1000),
+    })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.id, ctx.user.id);
+      if (patient.actualDischarge) throw new TRPCError({ code: "CONFLICT", message: "Ce patient a déjà quitté le service" });
+      const referralDate = new Date();
+      await db.updatePatient(input.id, {
+        actualDischarge: referralDate.toISOString(),
+        dischargeDisposition: "refere",
+        referralDestination: input.destination,
+        referralReason: input.reason,
+        referralDate,
+      });
+      await db.logActivity({
+        serviceId: patient.serviceId,
+        patientId: input.id,
+        userId: ctx.user.id,
+        action: "patient_referred",
+        details: `${patient.firstName} ${patient.lastName} référé(e) vers ${input.destination} — ${input.reason}`,
+      });
       return { success: true };
     }),
   }),
@@ -386,6 +417,77 @@ export const appRouter = router({
       const { id, rendezVous, serviceId, ...rest } = input;
       await db.updateConsultationDetails(id, { ...rest, rendezVous: rendezVous ? new Date(rendezVous) : undefined });
       await db.logActivity({ serviceId: consultation.serviceId, userId: ctx.user.id, action: "consultation_updated", details: "Consultation mise à jour" });
+      return { success: true };
+    }),
+    hospitalize: protectedProcedure.input(z.object({
+      id: z.number(),
+      bedNumber: z.number().int().positive().optional(),
+      status: z.enum(["stable", "modere", "critique"]).default("stable"),
+    })).mutation(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.id);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
+      if (consultation.disposition || consultation.linkedPatientId) {
+        throw new TRPCError({ code: "CONFLICT", message: "Une orientation a déjà été enregistrée pour cette consultation" });
+      }
+
+      const patientId = await db.createPatient({
+        firstName: consultation.patientFirstName,
+        lastName: consultation.patientLastName,
+        serviceId: consultation.serviceId,
+        createdById: ctx.user.id,
+        bedNumber: input.bedNumber,
+        status: input.status,
+        diagnosis: consultation.motif,
+        notes: consultation.notes || consultation.rapport || undefined,
+      });
+      await db.updateConsultationDetails(input.id, {
+        disposition: "hospitalise",
+        linkedPatientId: patientId,
+        status: "vu",
+        closedAt: new Date(),
+      });
+      if (!input.bedNumber) {
+        await db.createAlert({
+          serviceId: consultation.serviceId,
+          patientId,
+          type: "no_bed",
+          message: `${consultation.patientFirstName} ${consultation.patientLastName} n'a pas de lit assigné`,
+        });
+      }
+      await db.logActivity({
+        serviceId: consultation.serviceId,
+        patientId,
+        userId: ctx.user.id,
+        action: "consultation_hospitalized",
+        details: `${consultation.patientFirstName} ${consultation.patientLastName} hospitalisé(e) après consultation`,
+      });
+      return { patientId };
+    }),
+    refer: protectedProcedure.input(z.object({
+      id: z.number(),
+      destination: z.string().trim().min(2).max(200),
+      reason: z.string().trim().min(2).max(1000),
+    })).mutation(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.id);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
+      if (consultation.disposition || consultation.linkedPatientId) {
+        throw new TRPCError({ code: "CONFLICT", message: "Une orientation a déjà été enregistrée pour cette consultation" });
+      }
+      await db.updateConsultationDetails(input.id, {
+        disposition: "refere",
+        referralDestination: input.destination,
+        referralReason: input.reason,
+        status: "vu",
+        closedAt: new Date(),
+      });
+      await db.logActivity({
+        serviceId: consultation.serviceId,
+        userId: ctx.user.id,
+        action: "consultation_referred",
+        details: `${consultation.patientFirstName} ${consultation.patientLastName} référé(e) vers ${input.destination} — ${input.reason}`,
+      });
       return { success: true };
     }),
     history: protectedProcedure.input(z.object({
