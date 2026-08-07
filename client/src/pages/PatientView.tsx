@@ -15,7 +15,7 @@ import { getLoginUrl } from "@/const";
 import {
   ArrowLeft, AlertTriangle, FileText, ListChecks, Heart,
   Eye, Plus, CheckCircle, Clock, MoreVertical,
-  LayoutGrid, BookOpen, User, Loader2, Forward, LogOut
+  LayoutGrid, BookOpen, User, Loader2, Forward, LogOut, Bed
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BottomNav from "@/components/BottomNav";
@@ -45,8 +45,16 @@ export default function PatientView() {
   const [showReferralDialog, setShowReferralDialog] = useState(false);
   const [referralDestination, setReferralDestination] = useState("");
   const [referralReason, setReferralReason] = useState("");
+  const [showBedDialog, setShowBedDialog] = useState(false);
+  const [selectedBed, setSelectedBed] = useState("");
 
   const { data: patient, isLoading } = trpc.patients.get.useQuery({ id: patientId }, { enabled: patientId > 0 });
+  const patientServiceId = patient?.serviceId ?? 0;
+  const { data: service } = trpc.services.get.useQuery({ id: patientServiceId }, { enabled: patientServiceId > 0 });
+  const { data: servicePatients = [] } = trpc.patients.list.useQuery(
+    { serviceId: patientServiceId, filter: "tous" },
+    { enabled: patientServiceId > 0 }
+  );
   const { data: notes = [] } = trpc.notes.byPatient.useQuery({ patientId }, { enabled: patientId > 0 });
   const { data: tasks = [] } = trpc.tasks.byPatient.useQuery({ patientId }, { enabled: patientId > 0 });
   const { data: vitals = [] } = trpc.vitals.byPatient.useQuery({ patientId }, { enabled: patientId > 0 });
@@ -98,6 +106,18 @@ export default function PatientView() {
     onSuccess: () => { utils.patients.get.invalidate({ id: patientId }); toast.success("Patient mis à jour"); },
   });
 
+  const assignBed = trpc.patients.assignBed.useMutation({
+    onSuccess: () => {
+      utils.patients.get.invalidate({ id: patientId });
+      utils.patients.list.invalidate({ serviceId: patientServiceId });
+      utils.alerts.byService.invalidate({ serviceId: patientServiceId, onlyActive: true });
+      setShowBedDialog(false);
+      setSelectedBed("");
+      toast.success("Lit attribué au patient");
+    },
+    onError: error => toast.error(error.message),
+  });
+
   const dischargePatient = trpc.patients.discharge.useMutation({
     onSuccess: () => { toast.success("Patient sorti"); navigate(`/service/${patient?.serviceId}`); },
     onError: (error) => toast.error(error.message),
@@ -144,6 +164,13 @@ export default function PatientView() {
 
   const days = getDaysSince(patient.admissionDate);
   const pendingTasks = tasks.filter(t => t.status === "pending" || t.status === "in_progress");
+  const occupiedBeds = new Set(
+    servicePatients
+      .filter(other => other.id !== patient.id && other.bedNumber != null)
+      .map(other => other.bedNumber as number)
+  );
+  const availableBeds = Array.from({ length: service?.totalBeds ?? 0 }, (_, index) => index + 1)
+    .filter(bedNumber => !occupiedBeds.has(bedNumber));
 
   return (
     <div className="flex min-h-screen">
@@ -255,9 +282,27 @@ export default function PatientView() {
               {patient.dischargeDisposition === "refere" ? `Référé${patient.referralDestination ? ` vers ${patient.referralDestination}` : ""}` : "Patient sorti"}
             </Badge>
           )}
-          <Badge variant="outline" className="text-xs bg-[var(--pulseboard-green-light)] border-[var(--pulseboard-green)]/20 text-[var(--pulseboard-green)]">
-            {patient.bedNumber ? `Lit ${patient.bedNumber}` : "Sans lit"}
-          </Badge>
+          {!patient.actualDischarge && can("patient.edit") ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedBed(patient.bedNumber?.toString() ?? "");
+                setShowBedDialog(true);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                patient.bedNumber
+                  ? "border-[var(--pulseboard-green)]/20 bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)] hover:bg-emerald-100"
+                  : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+              }`}
+            >
+              <Bed className="h-3.5 w-3.5" />
+              {patient.bedNumber ? `Lit ${patient.bedNumber} — modifier` : "Attribuer un lit"}
+            </button>
+          ) : (
+            <Badge variant="outline" className="text-xs bg-[var(--pulseboard-green-light)] border-[var(--pulseboard-green)]/20 text-[var(--pulseboard-green)]">
+              {patient.bedNumber ? `Lit ${patient.bedNumber}` : "Sans lit"}
+            </Badge>
+          )}
           {patient.dateOfBirth && (
             <span className="text-xs text-muted-foreground">{patient.gender === "M" ? "♂" : "♀"} {patient.dateOfBirth}</span>
           )}
@@ -505,7 +550,49 @@ export default function PatientView() {
 
       </div>
 
-      {/* Note Dialog */}
+      {/* Bed assignment dialog */}
+      <Dialog open={showBedDialog} onOpenChange={setShowBedDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bed className="h-5 w-5 text-[var(--pulseboard-green)]" />
+              {patient.bedNumber ? "Changer le lit" : "Attribuer un lit"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Lit disponible</Label>
+              <Select value={selectedBed} onValueChange={setSelectedBed}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Choisir un lit" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBeds.map(bedNumber => (
+                    <SelectItem key={bedNumber} value={bedNumber.toString()}>
+                      Lit {bedNumber}{bedNumber === patient.bedNumber ? " (actuel)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {availableBeds.length === 0 && (
+                <p className="mt-2 text-xs text-[var(--pulseboard-red)]">Aucun lit disponible dans ce service.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowBedDialog(false)}>Annuler</Button>
+            <Button
+              className="bg-[var(--pulseboard-green)] text-white hover:bg-[var(--pulseboard-green-dark)]"
+              disabled={!selectedBed || assignBed.isPending || Number(selectedBed) === patient.bedNumber}
+              onClick={() => assignBed.mutate({ id: patientId, bedNumber: Number(selectedBed) })}
+            >
+              {assignBed.isPending ? "Attribution..." : "Confirmer le lit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Referral Dialog */}
       <Dialog open={showReferralDialog} onOpenChange={setShowReferralDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
