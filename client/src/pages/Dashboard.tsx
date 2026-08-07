@@ -17,7 +17,10 @@ import CreateServiceDialog from "@/components/CreateServiceDialog";
 import BottomNav from "@/components/BottomNav";
 
 export default function Dashboard() {
-  const { user, medicalRole, isAuthenticated, loading, logout, can } = useAuth();
+  const { user, medicalRole, isAuthenticated, loading, logout, can } = useAuth({
+    redirectOnUnauthenticated: true,
+    redirectPath: getLoginUrl("/dashboard"),
+  });
   const [, navigate] = useLocation();
   const [showCreateService, setShowCreateService] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
@@ -44,7 +47,6 @@ export default function Dashboard() {
   }
 
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl("/dashboard");
     return null;
   }
 
@@ -315,4 +317,3 @@ function ServicesList() {
     </div>
   );
 }
-

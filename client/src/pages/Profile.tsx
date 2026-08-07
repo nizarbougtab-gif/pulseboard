@@ -12,7 +12,10 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 export default function Profile() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth({
+    redirectOnUnauthenticated: true,
+    redirectPath: getLoginUrl("/profile"),
+  });
   const [, navigate] = useLocation();
   const { data: hospitals } = trpc.hospitals.list.useQuery();
 
@@ -42,7 +45,6 @@ export default function Profile() {
   }
 
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl("/profile");
     return null;
   }
 

@@ -27,6 +27,7 @@ export async function runMigrations() {
     console.log("[PulseBoard] Migrations PostgreSQL appliquées ✓");
   } catch (err) {
     console.warn("[PulseBoard] Migrations non disponibles:", (err as Error).message);
+    if (process.env.NODE_ENV === "production") throw err;
   }
 }
 
@@ -147,19 +148,22 @@ export async function isServiceMember(serviceId: number, userId: number) {
   return !!m;
 }
 
-export async function joinService(serviceId: number, userId: number, medicalRole: string) {
+export async function isServiceChef(serviceId: number, userId: number) {
+  const db = getDb();
+  const [membership] = await db.select({ role: serviceMembers.role })
+    .from(serviceMembers)
+    .where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.userId, userId)));
+  return membership?.role === "chef";
+}
+
+export async function joinService(serviceId: number, userId: number) {
   const db = getDb();
   const alreadyMember = await isServiceMember(serviceId, userId);
   if (alreadyMember) return { status: "already_member" };
-  if (medicalRole === "externe") {
-    const [existing] = await db.select().from(joinRequests).where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.userId, userId)));
-    if (existing) return { status: "pending" };
-    await db.insert(joinRequests).values({ serviceId, userId });
-    return { status: "pending" };
-  }
-  await db.insert(serviceMembers).values({ serviceId, userId, role: medicalRole === "medecin" ? "senior" : "junior" });
-  await logActivity({ serviceId, userId, action: "member_joined", details: null as any });
-  return { status: "joined" };
+  const [existing] = await db.select().from(joinRequests).where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.userId, userId)));
+  if (existing) return { status: "pending" };
+  await db.insert(joinRequests).values({ serviceId, userId });
+  return { status: "pending" };
 }
 
 export async function getPendingRequests(serviceId: number) {
@@ -173,6 +177,12 @@ export async function getPendingRequests(serviceId: number) {
   }).from(joinRequests)
     .leftJoin(users, eq(joinRequests.userId, users.id))
     .where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.status, "pending")));
+}
+
+export async function getJoinRequestById(requestId: number) {
+  const db = getDb();
+  const [request] = await db.select().from(joinRequests).where(eq(joinRequests.id, requestId));
+  return request ?? null;
 }
 
 export async function resolveJoinRequest(requestId: number, approved: boolean, resolvedById: number) {
@@ -251,6 +261,12 @@ export async function getTasksByPatient(patientId: number) {
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
+export async function getTaskById(taskId: number) {
+  const db = getDb();
+  const [task] = await db.select().from(patientTasks).where(eq(patientTasks.id, taskId));
+  return task ?? null;
+}
+
 export async function getTasksByService(serviceId: number) {
   const db = getDb();
   return db.select().from(patientTasks).where(eq(patientTasks.serviceId, serviceId));
@@ -273,6 +289,12 @@ export async function getAlertsByService(serviceId: number, onlyActive?: boolean
   let all = await db.select().from(alerts).where(eq(alerts.serviceId, serviceId));
   if (onlyActive) all = all.filter(a => !a.resolved);
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getAlertById(alertId: number) {
+  const db = getDb();
+  const [alert] = await db.select().from(alerts).where(eq(alerts.id, alertId));
+  return alert ?? null;
 }
 
 export async function createAlert(data: { serviceId: number; patientId?: number; type: "dps_missing" | "no_bed" | "task_overdue" | "critical_patient"; message: string }) {
@@ -382,6 +404,12 @@ export async function getConsultationsByService(serviceId: number) {
   return all.sort((a, b) => new Date(b.consultDate).getTime() - new Date(a.consultDate).getTime());
 }
 
+export async function getConsultationById(id: number) {
+  const db = getDb();
+  const [consultation] = await db.select().from(consultations).where(eq(consultations.id, id));
+  return consultation ?? null;
+}
+
 export async function createConsultation(data: { serviceId: number; patientFirstName: string; patientLastName: string; motif: string; createdById: number; notes?: string }) {
   const db = getDb();
   const [{ id }] = await db.insert(consultations).values(data).returning({ id: consultations.id });
@@ -474,20 +502,26 @@ export async function getRotationsByUser(userId: number) {
   return all.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 }
 
+export async function getRotationById(id: number) {
+  const db = getDb();
+  const [rotation] = await db.select().from(rotations).where(eq(rotations.id, id));
+  return rotation ?? null;
+}
+
 export async function createRotation(data: { userId: number; serviceId: number; serviceName: string; hospitalName: string; supervisorName?: string; startDate: string; endDate?: string; notes?: string }) {
   const db = getDb();
   const [{ id }] = await db.insert(rotations).values(data).returning({ id: rotations.id });
   return id;
 }
 
-export async function updateRotation(data: { id: number; endDate?: string; supervisorName?: string; notes?: string }) {
+export async function updateRotation(userId: number, data: { id: number; endDate?: string; supervisorName?: string; notes?: string }) {
   const db = getDb();
-  await db.update(rotations).set(data).where(eq(rotations.id, data.id));
+  await db.update(rotations).set(data).where(and(eq(rotations.id, data.id), eq(rotations.userId, userId)));
 }
 
-export async function deleteRotation(id: number) {
+export async function deleteRotation(id: number, userId: number) {
   const db = getDb();
-  await db.delete(rotations).where(eq(rotations.id, id));
+  await db.delete(rotations).where(and(eq(rotations.id, id), eq(rotations.userId, userId)));
 }
 
 // ===== COMPÉTENCES =====
@@ -509,6 +543,12 @@ export async function getCompetencesByUser(userId: number) {
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
+export async function getCompetenceById(id: number) {
+  const db = getDb();
+  const [competence] = await db.select().from(competences).where(eq(competences.id, id));
+  return competence ?? null;
+}
+
 export async function createCompetence(data: { userId: number; title: string; category: "geste_technique" | "diagnostic" | "therapeutique" | "communication" | "autre"; rotationId?: number; notes?: string }) {
   const db = getDb();
   const [{ id }] = await db.insert(competences).values(data).returning({ id: competences.id });
@@ -520,9 +560,9 @@ export async function validateCompetence(id: number, validatorId: number) {
   await db.update(competences).set({ validated: true, validatedById: validatorId, validatedAt: new Date().toISOString() }).where(eq(competences.id, id));
 }
 
-export async function deleteCompetence(id: number) {
+export async function deleteCompetence(id: number, userId: number) {
   const db = getDb();
-  await db.delete(competences).where(eq(competences.id, id));
+  await db.delete(competences).where(and(eq(competences.id, id), eq(competences.userId, userId)));
 }
 
 // ===== STATS PERSONNELLES =====
@@ -598,14 +638,15 @@ export async function createPersonalPatient(data: { userId: number; firstName: s
   return id;
 }
 
-export async function updatePersonalPatient(id: number, data: { status?: "stable" | "modere" | "critique"; diagnosis?: string; discharged?: boolean }) {
+export async function updatePersonalPatient(id: number, userId: number, data: { status?: "stable" | "modere" | "critique"; diagnosis?: string; discharged?: boolean }) {
   const db = getDb();
-  await db.update(personalPatients).set({ ...data, updatedAt: new Date() }).where(eq(personalPatients.id, id));
+  await db.update(personalPatients).set({ ...data, updatedAt: new Date() })
+    .where(and(eq(personalPatients.id, id), eq(personalPatients.userId, userId)));
 }
 
-export async function deletePersonalPatient(id: number) {
+export async function deletePersonalPatient(id: number, userId: number) {
   const db = getDb();
-  await db.delete(personalPatients).where(eq(personalPatients.id, id));
+  await db.delete(personalPatients).where(and(eq(personalPatients.id, id), eq(personalPatients.userId, userId)));
 }
 
 // Notes personnelles
@@ -622,9 +663,9 @@ export async function createPersonalNote(data: { userId: number; personalPatient
   return id;
 }
 
-export async function deletePersonalNote(id: number) {
+export async function deletePersonalNote(id: number, userId: number) {
   const db = getDb();
-  await db.delete(personalNotes).where(eq(personalNotes.id, id));
+  await db.delete(personalNotes).where(and(eq(personalNotes.id, id), eq(personalNotes.userId, userId)));
 }
 
 // Tâches personnelles
@@ -641,14 +682,15 @@ export async function createPersonalTask(data: { userId: number; personalPatient
   return id;
 }
 
-export async function completePersonalTask(id: number) {
+export async function completePersonalTask(id: number, userId: number) {
   const db = getDb();
-  await db.update(personalTasks).set({ status: "completed", completedAt: new Date() }).where(eq(personalTasks.id, id));
+  await db.update(personalTasks).set({ status: "completed", completedAt: new Date() })
+    .where(and(eq(personalTasks.id, id), eq(personalTasks.userId, userId)));
 }
 
-export async function deletePersonalTask(id: number) {
+export async function deletePersonalTask(id: number, userId: number) {
   const db = getDb();
-  await db.delete(personalTasks).where(eq(personalTasks.id, id));
+  await db.delete(personalTasks).where(and(eq(personalTasks.id, id), eq(personalTasks.userId, userId)));
 }
 
 // Vitaux personnels

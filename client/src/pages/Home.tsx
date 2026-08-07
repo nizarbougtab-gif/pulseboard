@@ -178,7 +178,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <PulseBoardLogo />
             <span className="font-bold text-lg tracking-tight">PulseBoard</span>
-            <span className="text-xs text-muted-foreground font-medium px-2 py-0.5 bg-muted rounded-full">Sénégal</span>
+            <span className="hidden sm:inline-flex text-xs text-muted-foreground font-medium px-2 py-0.5 bg-muted rounded-full">Sénégal</span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
             <a href="#problemes" className="hover:text-foreground transition-colors">Problèmes</a>
@@ -193,11 +193,15 @@ export default function Home() {
               </Button>
             ) : (
               <>
-                <Button variant="ghost" size="sm" asChild>
+                <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
                   <a href={getLoginUrl("/dashboard")}>Se connecter</a>
                 </Button>
-                <Button size="sm" className="bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white" asChild>
-                  <a href={getLoginUrl("/dashboard")}>Commencer <ChevronRight className="w-4 h-4 ml-1" /></a>
+                <Button size="sm" className="px-3 bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white" asChild>
+                  <a href={getLoginUrl("/dashboard")} aria-label="Se connecter ou créer un compte">
+                    <span className="hidden sm:inline">Commencer</span>
+                    <span className="sm:hidden">Entrer</span>
+                    <ChevronRight className="hidden sm:block w-4 h-4 ml-1" />
+                  </a>
                 </Button>
               </>
             )}

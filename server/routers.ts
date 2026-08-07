@@ -1,21 +1,55 @@
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { adminProcedure, publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { ENV } from "./_core/env";
 import { nanoid } from "nanoid";
+import { TRPCError } from "@trpc/server";
+import { COOKIE_NAME } from "../shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
 
-const SESSION_COOKIE = "pb_session";
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const FORBIDDEN_MESSAGE = "Vous n'avez pas accès à cette ressource";
 
 async function makeSessionToken(openId: string, name: string) {
-  const secret = new TextEncoder().encode(ENV.cookieSecret || "pulseboard-secret-key-change-in-prod");
+  if (!ENV.cookieSecret || ENV.cookieSecret.length < 32) {
+    throw new Error("JWT_SECRET doit contenir au moins 32 caractères");
+  }
+  const secret = new TextEncoder().encode(ENV.cookieSecret);
   return new SignJWT({ openId, name })
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("365d")
+    .setIssuedAt()
+    .setIssuer("pulseboard")
+    .setAudience("pulseboard-web")
+    .setExpirationTime("12h")
     .sign(secret);
+}
+
+async function requireServiceMember(serviceId: number, userId: number) {
+  if (!(await db.isServiceMember(serviceId, userId))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
+  }
+}
+
+async function requireServiceChef(serviceId: number, userId: number) {
+  if (!(await db.isServiceChef(serviceId, userId))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Action réservée au chef du service" });
+  }
+}
+
+async function requirePatientAccess(patientId: number, userId: number) {
+  const patient = await db.getPatientById(patientId);
+  if (!patient) throw new TRPCError({ code: "NOT_FOUND", message: "Patient introuvable" });
+  await requireServiceMember(patient.serviceId, userId);
+  return patient;
+}
+
+async function requirePersonalPatient(personalPatientId: number, userId: number) {
+  const patient = await db.getPersonalPatient(personalPatientId, userId);
+  if (!patient) throw new TRPCError({ code: "NOT_FOUND", message: "Patient introuvable" });
+  return patient;
 }
 
 export const appRouter = router({
@@ -23,9 +57,9 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     register: publicProcedure.input(z.object({
-      name: z.string().min(2),
-      email: z.string().email(),
-      password: z.string().min(6),
+      name: z.string().trim().min(2).max(100),
+      email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
+      password: z.string().min(10).max(128),
       medicalRole: z.enum(["externe", "interne", "resident", "medecin"]).default("interne"),
     })).mutation(async ({ ctx, input }) => {
       const existing = await db.getUserByEmail(input.email);
@@ -36,23 +70,23 @@ export const appRouter = router({
       const user = await db.getUserByOpenId(openId);
       if (!user) throw new Error("Erreur lors de la création du compte");
       const token = await makeSessionToken(openId, input.name);
-      ctx.res.cookie(SESSION_COOKIE, token, { httpOnly: true, maxAge: ONE_YEAR_MS, sameSite: "lax" });
+      ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
       return { success: true, user };
     }),
     login: publicProcedure.input(z.object({
-      email: z.string().email(),
-      password: z.string().min(1),
+      email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
+      password: z.string().min(1).max(128),
     })).mutation(async ({ ctx, input }) => {
       const user = await db.getUserByEmail(input.email);
       if (!user || !user.passwordHash) throw new Error("Email ou mot de passe incorrect");
       const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) throw new Error("Email ou mot de passe incorrect");
       const token = await makeSessionToken(user.openId, user.name || "");
-      ctx.res.cookie(SESSION_COOKIE, token, { httpOnly: true, maxAge: ONE_YEAR_MS, sameSite: "lax" });
+      ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
       return { success: true, user };
     }),
     logout: publicProcedure.mutation(({ ctx }) => {
-      ctx.res.clearCookie(SESSION_COOKIE, { sameSite: "lax" });
+      ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
       return { success: true } as const;
     }),
   }),
@@ -78,7 +112,7 @@ export const appRouter = router({
     list: publicProcedure.query(async () => {
       return db.getHospitals();
     }),
-    create: protectedProcedure.input(z.object({
+    create: adminProcedure.input(z.object({
       name: z.string().min(2),
       city: z.string().optional(),
     })).mutation(async ({ input }) => {
@@ -103,7 +137,8 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return db.getServicesByUser(ctx.user.id);
     }),
-    get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.id, ctx.user.id);
       return db.getServiceById(input.id);
     }),
     create: protectedProcedure.input(z.object({
@@ -117,18 +152,21 @@ export const appRouter = router({
       await db.logActivity({ serviceId: id, userId: ctx.user.id, action: "service_created", details: `Service "${input.name}" créé` });
       return { id, code };
     }),
-    members: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    members: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getServiceMembers(input.serviceId);
     }),
     addMember: protectedProcedure.input(z.object({
       serviceId: z.number(),
       userId: z.number(),
       role: z.enum(["chef", "senior", "junior", "stagiaire"]).optional(),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ ctx, input }) => {
+      await requireServiceChef(input.serviceId, ctx.user.id);
       await db.addServiceMember(input.serviceId, input.userId, input.role);
       return { success: true };
     }),
     leave: protectedProcedure.input(z.object({ serviceId: z.number() })).mutation(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       await db.leaveService(input.serviceId, ctx.user.id);
       return { success: true };
     }),
@@ -139,14 +177,19 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({
       serviceId: z.number(),
       filter: z.enum(["tous", "urgents", "sortie_prevue", "sortis"]).optional(),
-    })).query(async ({ input }) => {
+    })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getPatientsByService(input.serviceId, input.filter || "tous");
     }),
-    search: protectedProcedure.input(z.object({ query: z.string().min(1) })).query(async ({ input }) => {
-      return db.searchPatients(input.query);
+    search: protectedProcedure.input(z.object({ query: z.string().trim().min(2).max(100) })).query(async ({ ctx, input }) => {
+      const matches = await db.searchPatients(input.query);
+      const accessible = await Promise.all(matches.map(async patient =>
+        (await db.isServiceMember(patient.serviceId, ctx.user.id)) ? patient : null
+      ));
+      return accessible.filter((patient): patient is NonNullable<typeof patient> => patient !== null);
     }),
-    get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
-      return db.getPatientById(input.id);
+    get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
+      return requirePatientAccess(input.id, ctx.user.id);
     }),
     create: protectedProcedure.input(z.object({
       firstName: z.string().min(1),
@@ -164,6 +207,7 @@ export const appRouter = router({
       emergencyContact: z.string().optional(),
       expectedDischarge: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       const { expectedDischarge, ...rest } = input;
       const id = await db.createPatient({
         ...rest,
@@ -191,37 +235,38 @@ export const appRouter = router({
       actualDischarge: z.string().nullable().optional(),
       dpsCompleted: z.boolean().optional(),
     })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.id, ctx.user.id);
       const { id, expectedDischarge, actualDischarge, ...rest } = input;
       const updateData: any = { ...rest };
       if (expectedDischarge !== undefined) updateData.expectedDischarge = expectedDischarge || null;
       if (actualDischarge !== undefined) updateData.actualDischarge = actualDischarge || null;
       await db.updatePatient(id, updateData);
-      const patient = await db.getPatientById(id);
-      if (patient) {
-        await db.logActivity({ serviceId: patient.serviceId, patientId: id, userId: ctx.user.id, action: "patient_updated", details: `Patient ${patient.firstName} ${patient.lastName} mis à jour` });
+      const updatedPatient = await db.getPatientById(id);
+      if (updatedPatient) {
+        await db.logActivity({ serviceId: updatedPatient.serviceId, patientId: id, userId: ctx.user.id, action: "patient_updated", details: `Patient ${updatedPatient.firstName} ${updatedPatient.lastName} mis à jour` });
         // Create critical alert if status changed to critique
         if (input.status === "critique") {
-          await db.createAlert({ serviceId: patient.serviceId, patientId: id, type: "critical_patient", message: `${patient.firstName} ${patient.lastName} est passé en état critique` });
+          await db.createAlert({ serviceId: updatedPatient.serviceId, patientId: id, type: "critical_patient", message: `${updatedPatient.firstName} ${updatedPatient.lastName} est passé en état critique` });
         }
       }
       return { success: true };
     }),
     discharge: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.id, ctx.user.id);
       await db.updatePatient(input.id, { actualDischarge: new Date().toISOString() });
-      const patient = await db.getPatientById(input.id);
-      if (patient) {
-        await db.logActivity({ serviceId: patient.serviceId, patientId: input.id, userId: ctx.user.id, action: "patient_discharged", details: `${patient.firstName} ${patient.lastName} sorti(e)` });
-      }
+      await db.logActivity({ serviceId: patient.serviceId, patientId: input.id, userId: ctx.user.id, action: "patient_discharged", details: `${patient.firstName} ${patient.lastName} sorti(e)` });
       return { success: true };
     }),
   }),
 
   // Tasks
   tasks: router({
-    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ input }) => {
+    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ ctx, input }) => {
+      await requirePatientAccess(input.patientId, ctx.user.id);
       return db.getTasksByPatient(input.patientId);
     }),
-    byService: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    byService: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getTasksByService(input.serviceId);
     }),
     create: protectedProcedure.input(z.object({
@@ -233,6 +278,8 @@ export const appRouter = router({
       dueDate: z.string().optional(),
       assignedToId: z.number().optional(),
     })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.patientId, ctx.user.id);
+      if (patient.serviceId !== input.serviceId) throw new TRPCError({ code: "BAD_REQUEST", message: "Service incohérent" });
       const { dueDate, ...rest } = input;
       const id = await db.createTask({
         ...rest,
@@ -244,7 +291,10 @@ export const appRouter = router({
     updateStatus: protectedProcedure.input(z.object({
       id: z.number(),
       status: z.enum(["pending", "in_progress", "completed", "overdue"]),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ ctx, input }) => {
+      const task = await db.getTaskById(input.id);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Tâche introuvable" });
+      await requireServiceMember(task.serviceId, ctx.user.id);
       const data: any = { status: input.status };
       if (input.status === "completed") data.completedAt = new Date().toISOString();
       await db.updateTask(input.id, data);
@@ -257,10 +307,14 @@ export const appRouter = router({
     byService: protectedProcedure.input(z.object({
       serviceId: z.number(),
       onlyActive: z.boolean().optional(),
-    })).query(async ({ input }) => {
+    })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getAlertsByService(input.serviceId, input.onlyActive ?? true);
     }),
     resolve: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const alert = await db.getAlertById(input.id);
+      if (!alert) throw new TRPCError({ code: "NOT_FOUND", message: "Alerte introuvable" });
+      await requireServiceMember(alert.serviceId, ctx.user.id);
       await db.resolveAlert(input.id, ctx.user.id);
       return { success: true };
     }),
@@ -268,13 +322,15 @@ export const appRouter = router({
 
   // Messages
   messages: router({
-    list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getMessagesByService(input.serviceId);
     }),
     send: protectedProcedure.input(z.object({
       serviceId: z.number(),
       content: z.string().min(1),
     })).mutation(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       const id = await db.createMessage({ serviceId: input.serviceId, userId: ctx.user.id, content: input.content });
       return { id };
     }),
@@ -282,14 +338,16 @@ export const appRouter = router({
 
   // Activity log
   activity: router({
-    byService: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    byService: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getActivityByService(input.serviceId);
     }),
   }),
 
   // Consultations
   consultations: router({
-    list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getConsultationsByService(input.serviceId);
     }),
     create: protectedProcedure.input(z.object({
@@ -299,6 +357,7 @@ export const appRouter = router({
       motif: z.string().min(1),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       const id = await db.createConsultation({ ...input, createdById: ctx.user.id });
       await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "consultation_created", details: `Consultation ajoutée: ${input.patientFirstName} ${input.patientLastName}` });
       return { id };
@@ -306,7 +365,10 @@ export const appRouter = router({
     updateStatus: protectedProcedure.input(z.object({
       id: z.number(),
       status: z.enum(["en_attente", "vu", "reporte"]),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.id);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
       await db.updateConsultationStatus(input.id, input.status);
       return { success: true };
     }),
@@ -318,25 +380,28 @@ export const appRouter = router({
       status: z.enum(["en_attente", "vu", "reporte"]).optional(),
       serviceId: z.number().optional(),
     })).mutation(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.id);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
       const { id, rendezVous, serviceId, ...rest } = input;
       await db.updateConsultationDetails(id, { ...rest, rendezVous: rendezVous ? new Date(rendezVous) : undefined });
-      if (serviceId) {
-        await db.logActivity({ serviceId, userId: ctx.user.id, action: "consultation_updated", details: "Consultation mise à jour" });
-      }
+      await db.logActivity({ serviceId: consultation.serviceId, userId: ctx.user.id, action: "consultation_updated", details: "Consultation mise à jour" });
       return { success: true };
     }),
     history: protectedProcedure.input(z.object({
       serviceId: z.number(),
       firstName: z.string(),
       lastName: z.string(),
-    })).query(async ({ input }) => {
+    })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getConsultationHistory(input.serviceId, input.firstName, input.lastName);
     }),
   }),
 
   // Clinical Notes
   notes: router({
-    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ input }) => {
+    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ ctx, input }) => {
+      await requirePatientAccess(input.patientId, ctx.user.id);
       return db.getNotesByPatient(input.patientId);
     }),
     create: protectedProcedure.input(z.object({
@@ -345,6 +410,8 @@ export const appRouter = router({
       type: z.enum(["dar", "soap", "libre"]),
       content: z.string().min(1),
     })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.patientId, ctx.user.id);
+      if (patient.serviceId !== input.serviceId) throw new TRPCError({ code: "BAD_REQUEST", message: "Service incohérent" });
       const id = await db.createClinicalNote({ ...input, createdById: ctx.user.id });
       await db.logActivity({ serviceId: input.serviceId, patientId: input.patientId, userId: ctx.user.id, action: "note_created", details: `Note ${input.type.toUpperCase()} ajoutée` });
       return { id };
@@ -353,7 +420,8 @@ export const appRouter = router({
 
   // Vital Signs
   vitals: router({
-    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ input }) => {
+    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ ctx, input }) => {
+      await requirePatientAccess(input.patientId, ctx.user.id);
       return db.getVitalsByPatient(input.patientId);
     }),
     create: protectedProcedure.input(z.object({
@@ -368,6 +436,8 @@ export const appRouter = router({
       pain: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.patientId, ctx.user.id);
+      if (patient.serviceId !== input.serviceId) throw new TRPCError({ code: "BAD_REQUEST", message: "Service incohérent" });
       const id = await db.createVitalSigns({ ...input, recordedById: ctx.user.id });
       return { id };
     }),
@@ -375,7 +445,8 @@ export const appRouter = router({
 
   // Observations
   observations: router({
-    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ input }) => {
+    byPatient: protectedProcedure.input(z.object({ patientId: z.number() })).query(async ({ ctx, input }) => {
+      await requirePatientAccess(input.patientId, ctx.user.id);
       return db.getObservationsByPatient(input.patientId);
     }),
     create: protectedProcedure.input(z.object({
@@ -384,6 +455,8 @@ export const appRouter = router({
       content: z.string().min(1),
       category: z.enum(["clinique", "infirmier", "evolution", "autre"]).optional(),
     })).mutation(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.patientId, ctx.user.id);
+      if (patient.serviceId !== input.serviceId) throw new TRPCError({ code: "BAD_REQUEST", message: "Service incohérent" });
       const id = await db.createObservation({ ...input, createdById: ctx.user.id });
       return { id };
     }),
@@ -392,6 +465,7 @@ export const appRouter = router({
   // Releve
   releve: router({
     generate: protectedProcedure.input(z.object({ serviceId: z.number() })).mutation(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       // Get all active patients grouped by priority
       const allPatients = await db.getPatientsByService(input.serviceId, "tous");
       const critiques = allPatients.filter(p => p.status === "critique");
@@ -429,7 +503,8 @@ export const appRouter = router({
       await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "releve_generated", details: "Relève générée" });
       return { id, content };
     }),
-    list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getRelevesByService(input.serviceId);
     }),
   }),
@@ -448,6 +523,7 @@ export const appRouter = router({
       endDate: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
       return db.createRotation({ ...input, userId: ctx.user.id });
     }),
     update: protectedProcedure.input(z.object({
@@ -455,11 +531,11 @@ export const appRouter = router({
       endDate: z.string().optional(),
       supervisorName: z.string().optional(),
       notes: z.string().optional(),
-    })).mutation(async ({ input }) => {
-      return db.updateRotation(input);
+    })).mutation(async ({ ctx, input }) => {
+      return db.updateRotation(ctx.user.id, input);
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      return db.deleteRotation(input.id);
+    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      return db.deleteRotation(input.id, ctx.user.id);
     }),
   }),
 
@@ -477,10 +553,16 @@ export const appRouter = router({
       return db.createCompetence({ ...input, userId: ctx.user.id });
     }),
     validate: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const competence = await db.getCompetenceById(input.id);
+      if (!competence) throw new TRPCError({ code: "NOT_FOUND", message: "Compétence introuvable" });
+      if (!competence.rotationId) throw new TRPCError({ code: "FORBIDDEN", message: "Cette compétence n'est liée à aucune rotation" });
+      const rotation = await db.getRotationById(competence.rotationId);
+      if (!rotation) throw new TRPCError({ code: "NOT_FOUND", message: "Rotation introuvable" });
+      await requireServiceChef(rotation.serviceId, ctx.user.id);
       return db.validateCompetence(input.id, ctx.user.id);
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      return db.deleteCompetence(input.id);
+    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      return db.deleteCompetence(input.id, ctx.user.id);
     }),
   }),
 
@@ -502,13 +584,16 @@ export const appRouter = router({
     join: protectedProcedure.input(z.object({ code: z.string().min(4) })).mutation(async ({ ctx, input }) => {
       const service = await db.getServiceByCode(input.code);
       if (!service) throw new Error("Code invalide");
-      const medicalRole = (ctx.user as any).medicalRole ?? "externe";
-      return db.joinService(service.id, ctx.user.id, medicalRole);
+      return db.joinService(service.id, ctx.user.id);
     }),
-    pendingRequests: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ input }) => {
+    pendingRequests: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceChef(input.serviceId, ctx.user.id);
       return db.getPendingRequests(input.serviceId);
     }),
     resolve: protectedProcedure.input(z.object({ requestId: z.number(), approved: z.boolean() })).mutation(async ({ ctx, input }) => {
+      const request = await db.getJoinRequestById(input.requestId);
+      if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Demande introuvable" });
+      await requireServiceChef(request.serviceId, ctx.user.id);
       return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id);
     }),
     isChef: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
@@ -545,11 +630,13 @@ export const appRouter = router({
       status: z.enum(["stable", "modere", "critique"]).optional(),
       diagnosis: z.string().optional(),
       discharged: z.boolean().optional(),
-    })).mutation(async ({ input }) => {
-      return db.updatePersonalPatient(input.id, input);
+    })).mutation(async ({ ctx, input }) => {
+      await requirePersonalPatient(input.id, ctx.user.id);
+      return db.updatePersonalPatient(input.id, ctx.user.id, input);
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      return db.deletePersonalPatient(input.id);
+    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await requirePersonalPatient(input.id, ctx.user.id);
+      return db.deletePersonalPatient(input.id, ctx.user.id);
     }),
     // Notes
     notes: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
@@ -560,10 +647,11 @@ export const appRouter = router({
       type: z.enum(["dar", "soap", "libre"]).default("dar"),
       content: z.string().min(1),
     })).mutation(async ({ ctx, input }) => {
+      await requirePersonalPatient(input.personalPatientId, ctx.user.id);
       return db.createPersonalNote({ ...input, userId: ctx.user.id });
     }),
-    deleteNote: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      return db.deletePersonalNote(input.id);
+    deleteNote: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      return db.deletePersonalNote(input.id, ctx.user.id);
     }),
     // Tâches
     tasks: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
@@ -575,13 +663,14 @@ export const appRouter = router({
       description: z.string().optional(),
       priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
     })).mutation(async ({ ctx, input }) => {
+      await requirePersonalPatient(input.personalPatientId, ctx.user.id);
       return db.createPersonalTask({ ...input, userId: ctx.user.id });
     }),
-    completeTask: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      return db.completePersonalTask(input.id);
+    completeTask: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      return db.completePersonalTask(input.id, ctx.user.id);
     }),
-    deleteTask: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      return db.deletePersonalTask(input.id);
+    deleteTask: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      return db.deletePersonalTask(input.id, ctx.user.id);
     }),
     // Vitaux
     vitals: protectedProcedure.input(z.object({ personalPatientId: z.number() })).query(async ({ ctx, input }) => {
@@ -598,6 +687,7 @@ export const appRouter = router({
       pain: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+      await requirePersonalPatient(input.personalPatientId, ctx.user.id);
       return db.createPersonalVitals({ ...input, userId: ctx.user.id });
     }),
     // Observations
@@ -609,6 +699,7 @@ export const appRouter = router({
       content: z.string().min(1),
       category: z.enum(["clinique", "infirmier", "evolution", "autre"]).default("clinique"),
     })).mutation(async ({ ctx, input }) => {
+      await requirePersonalPatient(input.personalPatientId, ctx.user.id);
       return db.createPersonalObservation({ ...input, userId: ctx.user.id });
     }),
   }),

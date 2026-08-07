@@ -26,7 +26,10 @@ export default function PatientView() {
   const { id } = useParams<{ id: string }>();
   const patientId = parseInt(id || "0");
   const [, navigate] = useLocation();
-  const { isAuthenticated, loading, can } = useAuth();
+  const { isAuthenticated, loading, can } = useAuth({
+    redirectOnUnauthenticated: true,
+    redirectPath: getLoginUrl(`/patient/${patientId}`),
+  });
 
   const [activeTab, setActiveTab] = useState<PatientTab>("suivi");
   const [showNoteDialog, setShowNoteDialog] = useState(false);
@@ -103,7 +106,6 @@ export default function PatientView() {
   }
 
   if (!isAuthenticated) {
-    window.location.href = getLoginUrl(`/patient/${patientId}`);
     return null;
   }
 
@@ -624,4 +626,3 @@ export default function PatientView() {
     </div>
   );
 }
-

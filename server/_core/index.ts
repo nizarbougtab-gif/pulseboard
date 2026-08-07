@@ -30,6 +30,13 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  if (process.env.NODE_ENV === "production") {
+    if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL est requis en production");
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+      throw new Error("JWT_SECRET doit contenir au moins 32 caractères en production");
+    }
+  }
+
   // Migrations automatiques au démarrage
   await runMigrations();
   // Seed hôpitaux sénégalais si la table est vide
@@ -37,9 +44,43 @@ async function startServer() {
 
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.disable("x-powered-by");
+  if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self' data:; worker-src 'self' blob:"
+      );
+    }
+    next();
+  });
+
+  const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+  app.use("/api/trpc/auth.login", (req, res, next) => {
+    const now = Date.now();
+    const key = req.ip || req.socket.remoteAddress || "unknown";
+    const current = loginAttempts.get(key);
+    if (!current || current.resetAt <= now) {
+      loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60_000 });
+      return next();
+    }
+    if (current.count >= 10) {
+      res.setHeader("Retry-After", String(Math.ceil((current.resetAt - now) / 1000)));
+      return res.status(429).json({ error: "Trop de tentatives. Réessayez dans quelques minutes." });
+    }
+    current.count += 1;
+    next();
+  });
+
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
+  app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   // tRPC API

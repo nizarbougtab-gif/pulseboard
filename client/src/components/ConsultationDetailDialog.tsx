@@ -72,7 +72,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
 
   const buildExamensPara = () => {
     const custom = examensLibre.split(",").map(e => e.trim()).filter(Boolean);
-    return [...new Set([...examensCoches, ...custom])].join("|");
+    return Array.from(new Set([...examensCoches, ...custom])).join("|");
   };
 
   return (

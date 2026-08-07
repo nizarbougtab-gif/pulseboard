@@ -43,10 +43,6 @@ export function useAuth(options?: UseAuthOptions) {
   }, [logoutMutation, utils]);
 
   const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
     const user = meQuery.data ?? null;
     const medicalRole = (user as { medicalRole?: MedicalRole } | null)?.medicalRole ?? null;
     return {
@@ -66,13 +62,22 @@ export function useAuth(options?: UseAuthOptions) {
   ]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (meQuery.data) {
+      localStorage.setItem("manus-runtime-user-info", JSON.stringify(meQuery.data));
+    } else {
+      localStorage.removeItem("manus-runtime-user-info");
+    }
+  }, [meQuery.data]);
+
+  useEffect(() => {
     if (!redirectOnUnauthenticated) return;
     if (meQuery.isLoading || logoutMutation.isPending) return;
     if (state.user) return;
     if (typeof window === "undefined") return;
     if (window.location.pathname === redirectPath) return;
 
-    window.location.href = redirectPath
+    window.location.assign(redirectPath);
   }, [
     redirectOnUnauthenticated,
     redirectPath,
