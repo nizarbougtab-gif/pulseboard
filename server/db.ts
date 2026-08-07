@@ -249,6 +249,8 @@ export async function updatePatient(patientId: number, data: Partial<{
   firstName: string; lastName: string; bedNumber: number | null; status: "stable" | "modere" | "critique";
   diagnosis: string; allergies: string; antecedents: string; notes: string;
   expectedDischarge: string | null; actualDischarge: string | null; dpsCompleted: boolean;
+  dischargeDisposition: "sortie" | "refere" | null;
+  referralDestination: string | null; referralReason: string | null; referralDate: Date | null;
 }>) {
   const db = getDb();
   await db.update(patients).set({ ...data, updatedAt: new Date() }).where(eq(patients.id, patientId));
@@ -421,7 +423,17 @@ export async function updateConsultationStatus(id: number, status: "en_attente" 
   await db.update(consultations).set({ status, updatedAt: new Date() }).where(eq(consultations.id, id));
 }
 
-export async function updateConsultationDetails(id: number, data: { rapport?: string; examensPara?: string; rendezVous?: Date | null; status?: "en_attente" | "vu" | "reporte" }) {
+export async function updateConsultationDetails(id: number, data: {
+  rapport?: string;
+  examensPara?: string;
+  rendezVous?: Date | null;
+  status?: "en_attente" | "vu" | "reporte";
+  disposition?: "hospitalise" | "refere" | null;
+  linkedPatientId?: number | null;
+  referralDestination?: string | null;
+  referralReason?: string | null;
+  closedAt?: Date | null;
+}) {
   const db = getDb();
   await db.update(consultations).set({ ...data, updatedAt: new Date() }).where(eq(consultations.id, id));
 }
