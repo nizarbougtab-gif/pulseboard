@@ -397,6 +397,11 @@ export default function ServiceView() {
                         <div className="text-xs text-muted-foreground mt-0.5">
                           {patient.diagnosis || "Diagnostic en cours"}
                           {patient.expectedDischarge && <span className="ml-2 text-[var(--pulseboard-amber)]">· Sortie prévue</span>}
+                          {patient.actualDischarge && (
+                            <span className="ml-2 text-[var(--pulseboard-blue)]">
+                              · {patient.dischargeDisposition === "refere" ? `Référé${patient.referralDestination ? ` vers ${patient.referralDestination}` : ""}` : "Sorti"}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -460,6 +465,11 @@ export default function ServiceView() {
                         <Badge variant="outline" className={`text-[10px] ${c.status === "vu" ? "text-[var(--pulseboard-green)] border-[var(--pulseboard-green)]/30" : c.status === "reporte" ? "text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" : "text-[var(--pulseboard-amber)] border-[var(--pulseboard-amber)]/30"}`}>
                           {c.status === "vu" ? "Vu" : c.status === "reporte" ? "Reporté" : "En attente"}
                         </Badge>
+                        {c.disposition && (
+                          <Badge className={`text-[10px] ${c.disposition === "hospitalise" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]"}`}>
+                            {c.disposition === "hospitalise" ? "Hospitalisé" : "Référé"}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{c.motif}</p>
                       {c.rendezVous && <p className="text-xs text-[var(--pulseboard-amber)]">📅 RDV : {new Date(c.rendezVous).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>}
@@ -490,7 +500,12 @@ export default function ServiceView() {
       </div>
 
       {/* Admit patient dialog */}
-      <AdmitPatientDialog open={showAdmitDialog} onOpenChange={setShowAdmitDialog} serviceId={serviceId} />
+      <AdmitPatientDialog
+        open={showAdmitDialog}
+        onOpenChange={setShowAdmitDialog}
+        serviceId={serviceId}
+        onCreated={(path) => setActiveTab(path === "consultation" ? "consult" : "lits")}
+      />
 
       {selectedConsult && (
         <ConsultationDetailDialog
