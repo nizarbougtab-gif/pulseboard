@@ -322,8 +322,12 @@ export async function getMessagesByService(serviceId: number, limit = 50) {
     userId: serviceMessages.userId,
     userName: users.name,
     medicalRole: users.medicalRole,
+    patientFirstName: patients.firstName,
+    patientLastName: patients.lastName,
+    patientBedNumber: patients.bedNumber,
   }).from(serviceMessages)
     .leftJoin(users, eq(serviceMessages.userId, users.id))
+    .leftJoin(patients, eq(serviceMessages.patientId, patients.id))
     .where(eq(serviceMessages.serviceId, serviceId));
   return msgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
 }
