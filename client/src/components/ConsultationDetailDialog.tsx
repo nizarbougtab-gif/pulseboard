@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward } from "lucide-react";
+import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward, LogOut } from "lucide-react";
 
 const EXAMENS_COMMUNS = [
   "NFS", "CRP", "VS", "Glycémie", "Urée", "Créatinine",
@@ -30,7 +30,7 @@ interface Props {
     rapport?: string | null;
     examensPara?: string | null;
     rendezVous?: Date | string | null;
-    disposition?: "hospitalise" | "refere" | null;
+    disposition?: "hospitalise" | "refere" | "sortie" | null;
     linkedPatientId?: number | null;
     referralDestination?: string | null;
     referralReason?: string | null;
@@ -94,6 +94,15 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
     onError: (error) => toast.error(error.message),
   });
 
+  const dischargeConsultation = trpc.consultations.discharge.useMutation({
+    onSuccess: () => {
+      utils.consultations.list.invalidate({ serviceId: consultation.serviceId });
+      toast.success("Sortie enregistrée");
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const toggleExamen = (ex: string) => {
     setExamensCoches(prev =>
       prev.includes(ex) ? prev.filter(e => e !== ex) : [...prev, ex]
@@ -120,8 +129,8 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Motif : {consultation.motif}</p>
           {consultation.disposition && (
-            <Badge className={consultation.disposition === "hospitalise" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]"}>
-              {consultation.disposition === "hospitalise" ? "Hospitalisé" : `Référé${consultation.referralDestination ? ` vers ${consultation.referralDestination}` : ""}`}
+            <Badge className={consultation.disposition === "hospitalise" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : consultation.disposition === "refere" ? "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]" : "bg-gray-100 text-gray-700"}>
+              {consultation.disposition === "hospitalise" ? "Hospitalisé" : consultation.disposition === "refere" ? `Référé${consultation.referralDestination ? ` vers ${consultation.referralDestination}` : ""}` : "Sorti"}
             </Badge>
           )}
         </DialogHeader>
@@ -228,6 +237,11 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Annuler</Button>
           {!consultation.disposition && !consultation.linkedPatientId && <>
+            <Button variant="outline" className="text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" disabled={dischargeConsultation.isPending} onClick={() => {
+              if (confirm("Confirmer la sortie après cette consultation ?")) dischargeConsultation.mutate({ id: consultation.id });
+            }}>
+              <LogOut className="w-4 h-4 mr-1" /> Faire sortir
+            </Button>
             <Button variant="outline" onClick={() => setShowReferral(true)}>
               <Forward className="w-4 h-4 mr-1" /> Référer
             </Button>
