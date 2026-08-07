@@ -310,6 +310,13 @@ export async function resolveAlert(alertId: number, userId: number) {
   await db.update(alerts).set({ resolved: true, resolvedAt: new Date().toISOString(), resolvedById: userId }).where(eq(alerts.id, alertId));
 }
 
+export async function resolvePatientAlerts(patientId: number, type: "dps_missing" | "no_bed" | "task_overdue" | "critical_patient", userId: number) {
+  const db = getDb();
+  await db.update(alerts)
+    .set({ resolved: true, resolvedAt: new Date().toISOString(), resolvedById: userId })
+    .where(and(eq(alerts.patientId, patientId), eq(alerts.type, type), eq(alerts.resolved, false)));
+}
+
 // ===== MESSAGES =====
 export async function getMessagesByService(serviceId: number, limit = 50) {
   const db = getDb();
