@@ -360,9 +360,24 @@ export const appRouter = router({
     send: protectedProcedure.input(z.object({
       serviceId: z.number(),
       content: z.string().min(1),
+      patientId: z.number().optional(),
     })).mutation(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
-      const id = await db.createMessage({ serviceId: input.serviceId, userId: ctx.user.id, content: input.content });
+      if (input.patientId) {
+        const patient = await requirePatientAccess(input.patientId, ctx.user.id);
+        if (patient.serviceId !== input.serviceId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Ce patient n'appartient pas à ce service" });
+        }
+        if (patient.actualDischarge) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Ce patient est déjà sorti du service" });
+        }
+      }
+      const id = await db.createMessage({
+        serviceId: input.serviceId,
+        userId: ctx.user.id,
+        content: input.content,
+        patientId: input.patientId,
+      });
       return { id };
     }),
   }),
