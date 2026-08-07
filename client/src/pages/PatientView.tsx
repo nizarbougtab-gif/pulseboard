@@ -15,7 +15,7 @@ import { getLoginUrl } from "@/const";
 import {
   ArrowLeft, AlertTriangle, FileText, ListChecks, Heart,
   Eye, Plus, CheckCircle, Clock, MoreVertical,
-  LayoutGrid, BookOpen, User, Loader2
+  LayoutGrid, BookOpen, User, Loader2, Forward, LogOut
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BottomNav from "@/components/BottomNav";
@@ -42,6 +42,9 @@ export default function PatientView() {
   const [obsCategory, setObsCategory] = useState<"clinique" | "infirmier" | "evolution" | "autre">("clinique");
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: "", description: "", priority: "medium" as string });
+  const [showReferralDialog, setShowReferralDialog] = useState(false);
+  const [referralDestination, setReferralDestination] = useState("");
+  const [referralReason, setReferralReason] = useState("");
 
   const { data: patient, isLoading } = trpc.patients.get.useQuery({ id: patientId }, { enabled: patientId > 0 });
   const { data: notes = [] } = trpc.notes.byPatient.useQuery({ patientId }, { enabled: patientId > 0 });
@@ -97,6 +100,16 @@ export default function PatientView() {
 
   const dischargePatient = trpc.patients.discharge.useMutation({
     onSuccess: () => { toast.success("Patient sorti"); navigate(`/service/${patient?.serviceId}`); },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const referPatient = trpc.patients.refer.useMutation({
+    onSuccess: () => {
+      toast.success("Patient référé avec succès");
+      setShowReferralDialog(false);
+      navigate(`/service/${patient?.serviceId}`);
+    },
+    onError: (error) => toast.error(error.message),
   });
 
   const getDaysSince = (date: Date | string) => Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
@@ -181,6 +194,16 @@ export default function PatientView() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {!patient.actualDischarge && can("patient.discharge") && <>
+              <Button variant="outline" size="sm" onClick={() => setShowReferralDialog(true)}>
+                <Forward className="w-4 h-4 mr-1" /> Référer
+              </Button>
+              <Button variant="outline" size="sm" className="text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" onClick={() => {
+                if (confirm("Confirmer la sortie de ce patient ?")) dischargePatient.mutate({ id: patientId });
+              }}>
+                <LogOut className="w-4 h-4 mr-1" /> Faire sortir
+              </Button>
+            </>}
             <span className={`day-badge ${days >= 10 ? "old" : days >= 5 ? "mid" : "fresh"}`}>J+{days}</span>
             <span className={`urg-tag ${patient.status}`}>
               {patient.status === "critique" ? "Critique" : patient.status === "modere" ? "Modéré" : "Stable"}
@@ -208,11 +231,16 @@ export default function PatientView() {
                     Passer en Critique
                   </DropdownMenuItem>
                 </>)}
-                {can("patient.discharge") && (
+                {!patient.actualDischarge && can("patient.discharge") && (
                   <DropdownMenuItem className="text-[var(--pulseboard-red)]" onClick={() => {
                     if (confirm("Confirmer la sortie de ce patient ?")) dischargePatient.mutate({ id: patientId });
                   }}>
                     Sortie du patient
+                  </DropdownMenuItem>
+                )}
+                {!patient.actualDischarge && can("patient.discharge") && (
+                  <DropdownMenuItem onClick={() => setShowReferralDialog(true)}>
+                    Référer le patient
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -222,6 +250,11 @@ export default function PatientView() {
 
         {/* Patient info badges */}
         <div className="flex items-center gap-3 mt-3 flex-wrap">
+          {patient.actualDischarge && (
+            <Badge className={patient.dischargeDisposition === "refere" ? "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]" : "bg-gray-100 text-gray-700"}>
+              {patient.dischargeDisposition === "refere" ? `Référé${patient.referralDestination ? ` vers ${patient.referralDestination}` : ""}` : "Patient sorti"}
+            </Badge>
+          )}
           <Badge variant="outline" className="text-xs bg-[var(--pulseboard-green-light)] border-[var(--pulseboard-green)]/20 text-[var(--pulseboard-green)]">
             {patient.bedNumber ? `Lit ${patient.bedNumber}` : "Sans lit"}
           </Badge>
@@ -471,6 +504,31 @@ export default function PatientView() {
         )}
 
       </div>
+
+      {/* Note Dialog */}
+      <Dialog open={showReferralDialog} onOpenChange={setShowReferralDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Forward className="w-5 h-5 text-[var(--pulseboard-blue)]" /> Référer le patient</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label>Établissement ou service de destination *</Label>
+              <Input value={referralDestination} onChange={e => setReferralDestination(e.target.value)} placeholder="Ex : CHU de Fann — Cardiologie" className="mt-1" />
+            </div>
+            <div>
+              <Label>Motif de référence *</Label>
+              <Textarea value={referralReason} onChange={e => setReferralReason(e.target.value)} placeholder="Motif clinique et informations utiles..." className="mt-1" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowReferralDialog(false)}>Annuler</Button>
+            <Button disabled={referPatient.isPending || referralDestination.trim().length < 2 || referralReason.trim().length < 2} onClick={() => referPatient.mutate({ id: patientId, destination: referralDestination.trim(), reason: referralReason.trim() })}>
+              {referPatient.isPending ? "Référence..." : "Confirmer la référence"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Note Dialog */}
       <Dialog open={showNoteDialog} onOpenChange={setShowNoteDialog}>
