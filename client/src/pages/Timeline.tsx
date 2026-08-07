@@ -5,11 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useLocation, useParams } from "wouter";
 import { getLoginUrl } from "@/const";
-import { ArrowLeft, Activity, User, Clock, UserPlus, UserMinus, AlertTriangle, FileText, Edit } from "lucide-react";
+import { ArrowLeft, Activity, User, UserPlus, UserMinus, FileText, Edit, Forward, Bed } from "lucide-react";
 
 const actionIcons: Record<string, any> = {
   patient_admitted: UserPlus,
   patient_discharged: UserMinus,
+  patient_referred: Forward,
+  consultation_hospitalized: Bed,
+  consultation_referred: Forward,
   patient_updated: Edit,
   releve_generated: FileText,
   service_created: Activity,
@@ -19,6 +22,9 @@ const actionIcons: Record<string, any> = {
 const actionColors: Record<string, string> = {
   patient_admitted: "bg-emerald-100 text-emerald-700",
   patient_discharged: "bg-blue-100 text-blue-700",
+  patient_referred: "bg-sky-100 text-sky-700",
+  consultation_hospitalized: "bg-emerald-100 text-emerald-700",
+  consultation_referred: "bg-sky-100 text-sky-700",
   patient_updated: "bg-amber-100 text-amber-700",
   releve_generated: "bg-purple-100 text-purple-700",
   service_created: "bg-primary/10 text-primary",
@@ -28,6 +34,9 @@ const actionColors: Record<string, string> = {
 const actionLabels: Record<string, string> = {
   patient_admitted: "Patient admis",
   patient_discharged: "Patient sorti",
+  patient_referred: "Patient référé",
+  consultation_hospitalized: "Hospitalisation après consultation",
+  consultation_referred: "Référence après consultation",
   patient_updated: "Dossier mis à jour",
   releve_generated: "Relève générée",
   service_created: "Service créé",
