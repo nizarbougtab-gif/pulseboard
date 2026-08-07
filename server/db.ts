@@ -428,7 +428,7 @@ export async function updateConsultationDetails(id: number, data: {
   examensPara?: string;
   rendezVous?: Date | null;
   status?: "en_attente" | "vu" | "reporte";
-  disposition?: "hospitalise" | "refere" | null;
+  disposition?: "hospitalise" | "refere" | "sortie" | null;
   linkedPatientId?: number | null;
   referralDestination?: string | null;
   referralReason?: string | null;
