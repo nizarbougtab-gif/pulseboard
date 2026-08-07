@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { useLocation } from "wouter";
+import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward } from "lucide-react";
 
 const EXAMENS_COMMUNS = [
   "NFS", "CRP", "VS", "Glycémie", "Urée", "Créatinine",
@@ -29,11 +30,16 @@ interface Props {
     rapport?: string | null;
     examensPara?: string | null;
     rendezVous?: Date | string | null;
+    disposition?: "hospitalise" | "refere" | null;
+    linkedPatientId?: number | null;
+    referralDestination?: string | null;
+    referralReason?: string | null;
   };
 }
 
 export default function ConsultationDetailDialog({ open, onOpenChange, consultation }: Props) {
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
   const [rapport, setRapport] = useState(consultation.rapport || "");
   const [examensLibre, setExamensLibre] = useState("");
   const [examensCoches, setExamensCoches] = useState<string[]>(
@@ -44,6 +50,12 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
   );
   const [status, setStatus] = useState(consultation.status);
   const [showHistory, setShowHistory] = useState(false);
+  const [showHospitalize, setShowHospitalize] = useState(false);
+  const [hospitalBed, setHospitalBed] = useState("");
+  const [hospitalStatus, setHospitalStatus] = useState<"stable" | "modere" | "critique">("stable");
+  const [showReferral, setShowReferral] = useState(false);
+  const [referralDestination, setReferralDestination] = useState("");
+  const [referralReason, setReferralReason] = useState("");
 
   const { data: history = [] } = trpc.consultations.history.useQuery({
     serviceId: consultation.serviceId,
@@ -57,6 +69,29 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
       toast.success("Consultation enregistrée");
       onOpenChange(false);
     },
+  });
+
+  const hospitalize = trpc.consultations.hospitalize.useMutation({
+    onSuccess: ({ patientId }) => {
+      utils.consultations.list.invalidate({ serviceId: consultation.serviceId });
+      utils.patients.list.invalidate({ serviceId: consultation.serviceId });
+      utils.alerts.byService.invalidate({ serviceId: consultation.serviceId, onlyActive: true });
+      toast.success("Patient hospitalisé depuis la consultation");
+      setShowHospitalize(false);
+      onOpenChange(false);
+      navigate(`/patient/${patientId}`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const referConsultation = trpc.consultations.refer.useMutation({
+    onSuccess: () => {
+      utils.consultations.list.invalidate({ serviceId: consultation.serviceId });
+      toast.success("Patient référé avec succès");
+      setShowReferral(false);
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error(error.message),
   });
 
   const toggleExamen = (ex: string) => {
@@ -75,7 +110,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
     return Array.from(new Set([...examensCoches, ...custom])).join("|");
   };
 
-  return (
+  return <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -84,6 +119,11 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
             {consultation.patientFirstName} {consultation.patientLastName}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Motif : {consultation.motif}</p>
+          {consultation.disposition && (
+            <Badge className={consultation.disposition === "hospitalise" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : "bg-[var(--pulseboard-blue-light)] text-[var(--pulseboard-blue)]"}>
+              {consultation.disposition === "hospitalise" ? "Hospitalisé" : `Référé${consultation.referralDestination ? ` vers ${consultation.referralDestination}` : ""}`}
+            </Badge>
+          )}
         </DialogHeader>
 
         <div className="space-y-4">
@@ -187,6 +227,14 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Annuler</Button>
+          {!consultation.disposition && !consultation.linkedPatientId && <>
+            <Button variant="outline" onClick={() => setShowReferral(true)}>
+              <Forward className="w-4 h-4 mr-1" /> Référer
+            </Button>
+            <Button variant="outline" onClick={() => setShowHospitalize(true)}>
+              <Bed className="w-4 h-4 mr-1" /> Hospitaliser
+            </Button>
+          </>}
           <Button
             className="bg-[var(--pulseboard-green)] text-white"
             disabled={updateDetails.isPending}
@@ -204,5 +252,56 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+
+    <Dialog open={showHospitalize} onOpenChange={setShowHospitalize}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Hospitaliser après consultation</DialogTitle>
+          <p className="text-sm text-muted-foreground">{consultation.patientFirstName} {consultation.patientLastName}</p>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <Label>Numéro de lit (optionnel)</Label>
+            <Input type="number" min="1" value={hospitalBed} onChange={e => setHospitalBed(e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label>État clinique</Label>
+            <Select value={hospitalStatus} onValueChange={(value: "stable" | "modere" | "critique") => setHospitalStatus(value)}>
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="stable">Stable</SelectItem>
+                <SelectItem value="modere">Modéré</SelectItem>
+                <SelectItem value="critique">Critique</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setShowHospitalize(false)}>Annuler</Button>
+          <Button disabled={hospitalize.isPending} onClick={() => hospitalize.mutate({ id: consultation.id, bedNumber: hospitalBed ? parseInt(hospitalBed) : undefined, status: hospitalStatus })}>
+            {hospitalize.isPending ? "Hospitalisation..." : "Confirmer l'hospitalisation"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={showReferral} onOpenChange={setShowReferral}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Référer le patient</DialogTitle>
+          <p className="text-sm text-muted-foreground">Enregistrez la destination et le motif du transfert.</p>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div><Label>Établissement ou service de destination *</Label><Input value={referralDestination} onChange={e => setReferralDestination(e.target.value)} placeholder="Ex : CHU de Fann — Cardiologie" className="mt-1" /></div>
+          <div><Label>Motif de référence *</Label><Textarea value={referralReason} onChange={e => setReferralReason(e.target.value)} placeholder="Motif clinique et informations utiles..." className="mt-1" /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setShowReferral(false)}>Annuler</Button>
+          <Button disabled={referConsultation.isPending || referralDestination.trim().length < 2 || referralReason.trim().length < 2} onClick={() => referConsultation.mutate({ id: consultation.id, destination: referralDestination.trim(), reason: referralReason.trim() })}>
+            {referConsultation.isPending ? "Référence..." : "Confirmer la référence"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>;
 }
