@@ -4,6 +4,7 @@ import { parse as parseCookies } from "cookie";
 import { jwtVerify } from "jose";
 import { getUserByOpenId } from "../db";
 import { ENV } from "./env";
+import { COOKIE_NAME } from "../../shared/const";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -16,7 +17,7 @@ export async function createContext(opts: CreateExpressContextOptions): Promise<
   try {
     const cookieHeader = opts.req.headers.cookie || "";
     const cookies = parseCookies(cookieHeader);
-    const token = cookies["pb_session"];
+    const token = cookies[COOKIE_NAME];
     if (token && ENV.cookieSecret) {
       const secret = new TextEncoder().encode(ENV.cookieSecret);
       const { payload } = await jwtVerify(token, secret, {
