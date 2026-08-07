@@ -7,14 +7,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Bed, Stethoscope } from "lucide-react";
+
+type CarePath = "hospitalisation" | "consultation";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   serviceId: number;
+  onCreated?: (path: CarePath, id: number) => void;
 }
 
-export default function AdmitPatientDialog({ open, onOpenChange, serviceId }: Props) {
+export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCreated }: Props) {
+  const [carePath, setCarePath] = useState<CarePath>("hospitalisation");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [bedNumber, setBedNumber] = useState("");
@@ -24,54 +29,119 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId }: Pr
   const [gender, setGender] = useState<"M" | "F">("M");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phone, setPhone] = useState("");
+  const [motif, setMotif] = useState("");
+  const [consultNotes, setConsultNotes] = useState("");
 
   const utils = trpc.useUtils();
-  const createPatient = trpc.patients.create.useMutation({
-    onSuccess: () => {
-      utils.patients.list.invalidate();
-      utils.alerts.byService.invalidate();
-      toast.success("Patient admis avec succès");
-      onOpenChange(false);
-      resetForm();
-    },
-    onError: () => {
-      toast.error("Erreur lors de l'admission");
-    },
-  });
 
   const resetForm = () => {
-    setFirstName(""); setLastName(""); setBedNumber(""); setStatus("stable");
-    setDiagnosis(""); setAllergies(""); setGender("M"); setDateOfBirth(""); setPhone("");
+    setCarePath("hospitalisation");
+    setFirstName("");
+    setLastName("");
+    setBedNumber("");
+    setStatus("stable");
+    setDiagnosis("");
+    setAllergies("");
+    setGender("M");
+    setDateOfBirth("");
+    setPhone("");
+    setMotif("");
+    setConsultNotes("");
   };
+
+  const closeDialog = () => {
+    onOpenChange(false);
+    resetForm();
+  };
+
+  const createPatient = trpc.patients.create.useMutation({
+    onSuccess: ({ id }) => {
+      utils.patients.list.invalidate();
+      utils.alerts.byService.invalidate();
+      toast.success("Patient hospitalisé avec succès");
+      closeDialog();
+      onCreated?.("hospitalisation", id);
+    },
+    onError: (error) => toast.error(error.message || "Erreur lors de l'hospitalisation"),
+  });
+
+  const createConsultation = trpc.consultations.create.useMutation({
+    onSuccess: ({ id }) => {
+      utils.consultations.list.invalidate({ serviceId });
+      toast.success("Consultation créée avec succès");
+      closeDialog();
+      onCreated?.("consultation", id);
+    },
+    onError: (error) => toast.error(error.message || "Erreur lors de la création de la consultation"),
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName || !lastName) {
+    if (!firstName.trim() || !lastName.trim()) {
       toast.error("Le nom et le prénom sont obligatoires");
       return;
     }
+
+    if (carePath === "consultation") {
+      if (!motif.trim()) {
+        toast.error("Le motif de consultation est obligatoire");
+        return;
+      }
+      createConsultation.mutate({
+        serviceId,
+        patientFirstName: firstName.trim(),
+        patientLastName: lastName.trim(),
+        motif: motif.trim(),
+        notes: consultNotes.trim() || undefined,
+      });
+      return;
+    }
+
     createPatient.mutate({
-      firstName,
-      lastName,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       serviceId,
       bedNumber: bedNumber ? parseInt(bedNumber) : undefined,
       status,
-      diagnosis: diagnosis || undefined,
-      allergies: allergies || undefined,
+      diagnosis: diagnosis.trim() || undefined,
+      allergies: allergies.trim() || undefined,
       gender,
       dateOfBirth: dateOfBirth || undefined,
-      phone: phone || undefined,
+      phone: phone.trim() || undefined,
     });
   };
 
+  const isPending = createPatient.isPending || createConsultation.isPending;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => nextOpen ? onOpenChange(true) : closeDialog()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Admettre un patient</DialogTitle>
-          <DialogDescription>Renseignez les informations du nouveau patient.</DialogDescription>
+          <DialogTitle>Nouveau parcours patient</DialogTitle>
+          <DialogDescription>Choisissez une hospitalisation ou une consultation.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setCarePath("hospitalisation")}
+              className={`rounded-xl border p-3 text-left transition-all ${carePath === "hospitalisation" ? "border-[var(--pulseboard-green)] bg-[var(--pulseboard-green-light)]" : "border-border hover:border-[var(--pulseboard-green)]/40"}`}
+            >
+              <Bed className="w-5 h-5 text-[var(--pulseboard-green)] mb-2" />
+              <div className="text-sm font-semibold">Hospitaliser</div>
+              <div className="text-xs text-muted-foreground">Créer un dossier d'hospitalisation</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCarePath("consultation")}
+              className={`rounded-xl border p-3 text-left transition-all ${carePath === "consultation" ? "border-[var(--pulseboard-green)] bg-[var(--pulseboard-green-light)]" : "border-border hover:border-[var(--pulseboard-green)]/40"}`}
+            >
+              <Stethoscope className="w-5 h-5 text-[var(--pulseboard-green)] mb-2" />
+              <div className="text-sm font-semibold">Consulter</div>
+              <div className="text-xs text-muted-foreground">Ajouter aux consultations</div>
+            </button>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Nom *</Label>
@@ -82,55 +152,61 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId }: Pr
               <Input placeholder="Prénom" value={firstName} onChange={e => setFirstName(e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label>Genre</Label>
-              <Select value={gender} onValueChange={(v: "M" | "F") => setGender(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="M">Masculin</SelectItem>
-                  <SelectItem value="F">Féminin</SelectItem>
-                </SelectContent>
-              </Select>
+
+          {carePath === "hospitalisation" ? <>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Genre</Label>
+                <Select value={gender} onValueChange={(v: "M" | "F") => setGender(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="M">Masculin</SelectItem><SelectItem value="F">Féminin</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Date de naissance</Label>
+                <Input type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Téléphone</Label>
+                <Input placeholder="+221..." value={phone} onChange={e => setPhone(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Numéro de lit</Label>
+                <Input type="number" min="1" placeholder="ex : 5" value={bedNumber} onChange={e => setBedNumber(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Statut</Label>
+                <Select value={status} onValueChange={(v: "stable" | "modere" | "critique") => setStatus(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="stable">Stable</SelectItem><SelectItem value="modere">Modéré</SelectItem><SelectItem value="critique">Critique</SelectItem></SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Date de naissance</Label>
-              <Input type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)} />
+              <Label>Diagnostic</Label>
+              <Textarea placeholder="Diagnostic principal..." value={diagnosis} onChange={e => setDiagnosis(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Téléphone</Label>
-              <Input placeholder="+221..." value={phone} onChange={e => setPhone(e.target.value)} />
+              <Label>Allergies</Label>
+              <Input placeholder="ex : Pénicilline, Bétadine..." value={allergies} onChange={e => setAllergies(e.target.value)} />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          </> : <>
             <div className="space-y-2">
-              <Label>Numéro de lit</Label>
-              <Input type="number" min="1" placeholder="ex: 5" value={bedNumber} onChange={e => setBedNumber(e.target.value)} />
+              <Label>Motif de consultation *</Label>
+              <Input placeholder="Ex : Céphalées, douleur abdominale..." value={motif} onChange={e => setMotif(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Statut</Label>
-              <Select value={status} onValueChange={(v: "stable" | "modere" | "critique") => setStatus(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="stable">Stable</SelectItem>
-                  <SelectItem value="modere">Modéré</SelectItem>
-                  <SelectItem value="critique">Critique</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Notes</Label>
+              <Textarea placeholder="Informations utiles pour la consultation..." value={consultNotes} onChange={e => setConsultNotes(e.target.value)} />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Diagnostic</Label>
-            <Textarea placeholder="Diagnostic principal..." value={diagnosis} onChange={e => setDiagnosis(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Allergies</Label>
-            <Input placeholder="ex: Pénicilline, Bétadine..." value={allergies} onChange={e => setAllergies(e.target.value)} />
-          </div>
+          </>}
+
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={createPatient.isPending}>
-              {createPatient.isPending ? "Admission..." : "Admettre le patient"}
+            <Button type="button" variant="outline" onClick={closeDialog}>Annuler</Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Enregistrement..." : carePath === "hospitalisation" ? "Hospitaliser le patient" : "Créer la consultation"}
             </Button>
           </div>
         </form>
@@ -138,4 +214,3 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId }: Pr
     </Dialog>
   );
 }
-
