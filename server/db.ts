@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
 
@@ -156,11 +156,24 @@ export async function isServiceChef(serviceId: number, userId: number) {
   return membership?.role === "chef";
 }
 
-export async function joinService(serviceId: number, userId: number) {
+export async function joinService(
+  serviceId: number,
+  userId: number,
+  options?: { autoApprove?: boolean; medicalRole?: "externe" | "interne" | "resident" | "medecin" | null },
+) {
   const db = getDb();
   const alreadyMember = await isServiceMember(serviceId, userId);
   if (alreadyMember) return { status: "already_member" };
   const [existing] = await db.select().from(joinRequests).where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.userId, userId)));
+  if (options?.autoApprove) {
+    const memberRole = options.medicalRole === "medecin" || options.medicalRole === "resident" ? "senior" : "junior";
+    await db.insert(serviceMembers).values({ serviceId, userId, role: memberRole });
+    if (existing) {
+      await db.update(joinRequests).set({ status: "approved", resolvedAt: new Date(), resolvedById: userId }).where(eq(joinRequests.id, existing.id));
+    }
+    await logActivity({ serviceId, userId, action: "member_auto_joined", details: "Accès automatique : rôle déjà confirmé dans le même hôpital" });
+    return { status: "joined" };
+  }
   if (existing) return { status: "pending" };
   await db.insert(joinRequests).values({ serviceId, userId });
   return { status: "pending" };
@@ -173,6 +186,7 @@ export async function getPendingRequests(serviceId: number) {
     userId: joinRequests.userId,
     userName: users.name,
     userEmail: users.email,
+    medicalRole: users.medicalRole,
     createdAt: joinRequests.createdAt,
   }).from(joinRequests)
     .leftJoin(users, eq(joinRequests.userId, users.id))
@@ -191,7 +205,19 @@ export async function resolveJoinRequest(requestId: number, approved: boolean, r
   if (!req) return;
   await db.update(joinRequests).set({ status: approved ? "approved" : "rejected", resolvedAt: new Date(), resolvedById }).where(eq(joinRequests.id, requestId));
   if (approved) {
-    await db.insert(serviceMembers).values({ serviceId: req.serviceId, userId: req.userId, role: "stagiaire" });
+    const [memberUser] = await db.select({ medicalRole: users.medicalRole }).from(users).where(eq(users.id, req.userId));
+    const memberRole = memberUser?.medicalRole === "medecin" || memberUser?.medicalRole === "resident"
+      ? "senior"
+      : memberUser?.medicalRole === "externe"
+        ? "stagiaire"
+        : "junior";
+    await db.insert(serviceMembers).values({ serviceId: req.serviceId, userId: req.userId, role: memberRole });
+    await db.update(users).set({
+      medicalRoleVerified: true,
+      medicalRoleVerifiedById: resolvedById,
+      medicalRoleVerifiedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(users.id, req.userId));
     await logActivity({ serviceId: req.serviceId, userId: req.userId, action: "member_joined", details: null as any });
   }
 }
@@ -310,6 +336,13 @@ export async function resolveAlert(alertId: number, userId: number) {
   await db.update(alerts).set({ resolved: true, resolvedAt: new Date().toISOString(), resolvedById: userId }).where(eq(alerts.id, alertId));
 }
 
+export async function getServiceMemberRole(serviceId: number, userId: number) {
+  const db = getDb();
+  const [membership] = await db.select({ role: serviceMembers.role }).from(serviceMembers)
+    .where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.userId, userId)));
+  return membership?.role ?? null;
+}
+
 export async function resolvePatientAlerts(patientId: number, type: "dps_missing" | "no_bed" | "task_overdue" | "critical_patient", userId: number) {
   const db = getDb();
   await db.update(alerts)
@@ -364,6 +397,137 @@ export async function getActivityByService(serviceId: number, limit = 50) {
 export async function logActivity(data: { serviceId: number; patientId?: number; userId: number; action: string; details?: string }) {
   const db = getDb();
   await db.insert(activityLog).values(data);
+}
+
+// ===== PROPOSITIONS DE DÉCISION CLINIQUE =====
+export async function createCareDecisionProposal(data: {
+  serviceId: number;
+  subjectType: "patient" | "consultation";
+  subjectId: number;
+  decisionType: "sortie" | "refere" | "hospitalise";
+  destination?: string;
+  reason?: string;
+  bedNumber?: number;
+  patientStatus?: "stable" | "modere" | "critique";
+  urgency?: "normal" | "urgent";
+  assignedReviewerId?: number;
+  proposedById: number;
+}) {
+  const db = getDb();
+  const [{ id }] = await db.insert(careDecisionProposals).values(data).returning({ id: careDecisionProposals.id });
+  return id;
+}
+
+export async function getCareDecisionProposal(id: number) {
+  const db = getDb();
+  const [proposal] = await db.select().from(careDecisionProposals).where(eq(careDecisionProposals.id, id));
+  return proposal ?? null;
+}
+
+export async function getCareDecisionProposals(serviceId: number, pendingOnly = false) {
+  const db = getDb();
+  let rows = await db.select({
+    id: careDecisionProposals.id,
+    serviceId: careDecisionProposals.serviceId,
+    subjectType: careDecisionProposals.subjectType,
+    subjectId: careDecisionProposals.subjectId,
+    decisionType: careDecisionProposals.decisionType,
+    destination: careDecisionProposals.destination,
+    reason: careDecisionProposals.reason,
+    bedNumber: careDecisionProposals.bedNumber,
+    patientStatus: careDecisionProposals.patientStatus,
+    urgency: careDecisionProposals.urgency,
+    assignedReviewerId: careDecisionProposals.assignedReviewerId,
+    status: careDecisionProposals.status,
+    proposedById: careDecisionProposals.proposedById,
+    proposerName: users.name,
+    reviewedById: careDecisionProposals.reviewedById,
+    reviewNote: careDecisionProposals.reviewNote,
+    createdAt: careDecisionProposals.createdAt,
+    reviewedAt: careDecisionProposals.reviewedAt,
+  }).from(careDecisionProposals)
+    .leftJoin(users, eq(careDecisionProposals.proposedById, users.id))
+    .where(eq(careDecisionProposals.serviceId, serviceId));
+  if (pendingOnly) rows = rows.filter(row => row.status === "pending");
+  const enriched = await Promise.all(rows.map(async row => {
+    if (row.subjectType === "patient") {
+      const patient = await getPatientById(row.subjectId);
+      return { ...row, subjectName: patient ? `${patient.firstName} ${patient.lastName}` : `Patient #${row.subjectId}`, subjectBedNumber: patient?.bedNumber ?? null };
+    }
+    const consultation = await getConsultationById(row.subjectId);
+    return { ...row, subjectName: consultation ? `${consultation.patientFirstName} ${consultation.patientLastName}` : `Consultation #${row.subjectId}`, subjectBedNumber: null };
+  }));
+  return enriched.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function reviewCareDecisionProposal(id: number, data: {
+  status: "approved" | "rejected";
+  reviewedById: number;
+  reviewNote?: string;
+}) {
+  const db = getDb();
+  const claimed = await db.update(careDecisionProposals).set({ ...data, reviewedAt: new Date() })
+    .where(and(eq(careDecisionProposals.id, id), eq(careDecisionProposals.status, "pending")))
+    .returning({ id: careDecisionProposals.id });
+  return claimed.length === 1;
+}
+
+export async function resetCareDecisionProposal(id: number) {
+  const db = getDb();
+  await db.update(careDecisionProposals).set({
+    status: "pending", reviewedById: null, reviewNote: null, reviewedAt: null,
+  }).where(eq(careDecisionProposals.id, id));
+}
+
+// ===== GARDES =====
+export async function getGuardsByService(serviceId: number) {
+  const db = getDb();
+  const rows = await db.select().from(guards).where(eq(guards.serviceId, serviceId)).orderBy(desc(guards.startsAt));
+  return Promise.all(rows.map(async guard => {
+    const members = await db.select({
+      id: guardMembers.id, userId: guardMembers.userId, dutyRole: guardMembers.dutyRole,
+      userName: users.name, medicalRole: users.medicalRole,
+    }).from(guardMembers).leftJoin(users, eq(guardMembers.userId, users.id)).where(eq(guardMembers.guardId, guard.id));
+    const assignments = await db.select({
+      id: guardAssignments.id, patientId: guardAssignments.patientId, assignedToId: guardAssignments.assignedToId,
+      notes: guardAssignments.notes, patientFirstName: patients.firstName, patientLastName: patients.lastName,
+      bedNumber: patients.bedNumber,
+    }).from(guardAssignments).leftJoin(patients, eq(guardAssignments.patientId, patients.id)).where(eq(guardAssignments.guardId, guard.id));
+    return { ...guard, members, assignments };
+  }));
+}
+
+export async function createGuard(data: { serviceId: number; startsAt: Date; endsAt: Date; supervisorId?: number; createdById: number; memberIds?: number[] }) {
+  const db = getDb();
+  const { memberIds, ...guardData } = data;
+  const [{ id }] = await db.insert(guards).values(guardData).returning({ id: guards.id });
+  const uniqueMembers = Array.from(new Set([data.createdById, data.supervisorId, ...(memberIds || [])].filter(Boolean) as number[]));
+  if (uniqueMembers.length) await db.insert(guardMembers).values(uniqueMembers.map(userId => ({
+    guardId: id, userId, dutyRole: userId === data.supervisorId ? "supervisor" as const : "clinician" as const,
+  })));
+  return id;
+}
+
+export async function updateGuardStatus(id: number, serviceId: number, status: "active" | "ended", summary?: string) {
+  const db = getDb();
+  await db.update(guards).set({ status, summary }).where(and(eq(guards.id, id), eq(guards.serviceId, serviceId)));
+}
+
+export async function addGuardMember(guardId: number, userId: number, dutyRole: "student" | "clinician" | "supervisor") {
+  const db = getDb();
+  await db.insert(guardMembers).values({ guardId, userId, dutyRole });
+}
+
+export async function assignGuardPatient(guardId: number, patientId: number, assignedToId: number, notes?: string) {
+  const db = getDb();
+  const [{ id }] = await db.insert(guardAssignments).values({ guardId, patientId, assignedToId, notes }).returning({ id: guardAssignments.id });
+  return id;
+}
+
+export async function getGuardById(id: number) {
+  const db = getDb();
+  const [guard] = await db.select().from(guards).where(eq(guards.id, id));
+  return guard ?? null;
 }
 
 // ===== RELEVES =====
@@ -470,6 +634,8 @@ export async function getNotesByPatient(patientId: number) {
     content: clinicalNotes.content,
     createdAt: clinicalNotes.createdAt,
     createdById: clinicalNotes.createdById,
+    supersedesNoteId: clinicalNotes.supersedesNoteId,
+    correctionReason: clinicalNotes.correctionReason,
     userName: users.name,
   }).from(clinicalNotes)
     .leftJoin(users, eq(clinicalNotes.createdById, users.id))
@@ -477,7 +643,7 @@ export async function getNotesByPatient(patientId: number) {
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function createClinicalNote(data: { patientId: number; serviceId: number; type: "dar" | "soap" | "libre"; content: string; createdById: number }) {
+export async function createClinicalNote(data: { patientId: number; serviceId: number; type: "dar" | "soap" | "libre"; content: string; createdById: number; supersedesNoteId?: number; correctionReason?: string }) {
   const db = getDb();
   const [{ id }] = await db.insert(clinicalNotes).values(data).returning({ id: clinicalNotes.id });
   return id;
@@ -588,6 +754,46 @@ export async function deleteCompetence(id: number, userId: number) {
   await db.delete(competences).where(and(eq(competences.id, id), eq(competences.userId, userId)));
 }
 
+// ===== GESTES / PROCÉDURES DU CARNET =====
+export async function getProceduresByUser(userId: number) {
+  const db = getDb();
+  return db.select({
+    id: procedures.id, rotationId: procedures.rotationId, personalPatientId: procedures.personalPatientId,
+    title: procedures.title, performedAt: procedures.performedAt, participationLevel: procedures.participationLevel,
+    outcome: procedures.outcome, attempts: procedures.attempts, reflection: procedures.reflection,
+    validated: procedures.validated, validatedById: procedures.validatedById, validatedAt: procedures.validatedAt,
+    validatorComment: procedures.validatorComment, validatorName: users.name, createdAt: procedures.createdAt,
+  }).from(procedures).leftJoin(users, eq(procedures.validatedById, users.id))
+    .where(eq(procedures.userId, userId)).orderBy(desc(procedures.performedAt));
+}
+
+export async function getProcedureById(id: number) {
+  const db = getDb();
+  const [procedure] = await db.select().from(procedures).where(eq(procedures.id, id));
+  return procedure ?? null;
+}
+
+export async function createProcedure(data: {
+  userId: number; rotationId?: number; personalPatientId?: number; title: string; performedAt?: Date;
+  participationLevel: "observed" | "assisted" | "supervised" | "autonomous";
+  outcome?: "success" | "partial" | "failed"; attempts?: number; reflection?: string;
+}) {
+  const db = getDb();
+  const [{ id }] = await db.insert(procedures).values(data).returning({ id: procedures.id });
+  return id;
+}
+
+export async function validateProcedure(id: number, validatorId: number, validatorComment?: string) {
+  const db = getDb();
+  await db.update(procedures).set({ validated: true, validatedById: validatorId, validatedAt: new Date(), validatorComment })
+    .where(eq(procedures.id, id));
+}
+
+export async function deleteProcedure(id: number, userId: number) {
+  const db = getDb();
+  await db.delete(procedures).where(and(eq(procedures.id, id), eq(procedures.userId, userId), eq(procedures.validated, false)));
+}
+
 // ===== STATS PERSONNELLES =====
 export async function getPersonalStats(userId: number) {
   const db = getDb();
@@ -596,12 +802,16 @@ export async function getPersonalStats(userId: number) {
   const [rotationsCount] = await db.select({ count: count() }).from(rotations).where(eq(rotations.userId, userId));
   const [competencesCount] = await db.select({ count: count() }).from(competences).where(eq(competences.userId, userId));
   const [validatedCount] = await db.select({ count: count() }).from(competences).where(and(eq(competences.userId, userId), eq(competences.validated, true)));
+  const [proceduresCount] = await db.select({ count: count() }).from(procedures).where(eq(procedures.userId, userId));
+  const [validatedProceduresCount] = await db.select({ count: count() }).from(procedures).where(and(eq(procedures.userId, userId), eq(procedures.validated, true)));
   return {
     notes: notesCount?.count ?? 0,
     tasks: tasksCount?.count ?? 0,
     rotations: rotationsCount?.count ?? 0,
     competences: competencesCount?.count ?? 0,
     competencesValidated: validatedCount?.count ?? 0,
+    procedures: proceduresCount?.count ?? 0,
+    proceduresValidated: validatedProceduresCount?.count ?? 0,
   };
 }
 
@@ -641,24 +851,59 @@ export async function getTasksByUser(userId: number) {
 }
 
 // ===== PATIENTS PERSONNELS =====
+function toInitial(value: string | null | undefined) {
+  const letter = value?.trim().charAt(0).toLocaleUpperCase("fr-FR");
+  return letter ? `${letter}.` : "X.";
+}
+
+export async function getClinicalNoteById(id: number) {
+  const db = getDb();
+  const [note] = await db.select().from(clinicalNotes).where(eq(clinicalNotes.id, id));
+  return note ?? null;
+}
+
+export async function userHasServiceMembership(userId: number) {
+  const db = getDb();
+  const [membership] = await db.select({ id: serviceMembers.id }).from(serviceMembers).where(eq(serviceMembers.userId, userId));
+  return !!membership;
+}
+
+function anonymizePersonalPatient<T extends { firstName: string; lastName: string; dateOfBirth?: string | null; phone?: string | null }>(patient: T) {
+  return { ...patient, firstName: toInitial(patient.firstName), lastName: toInitial(patient.lastName), dateOfBirth: null, phone: null };
+}
+
 export async function getPersonalPatients(userId: number) {
   const db = getDb();
-  return db.select().from(personalPatients)
+  const rows = await db.select().from(personalPatients)
     .where(and(eq(personalPatients.userId, userId), eq(personalPatients.discharged, false)))
     .orderBy(desc(personalPatients.createdAt));
+  return rows.map(anonymizePersonalPatient);
 }
 
 export async function getPersonalPatient(id: number, userId: number) {
   const db = getDb();
   const [p] = await db.select().from(personalPatients)
     .where(and(eq(personalPatients.id, id), eq(personalPatients.userId, userId)));
-  return p;
+  return p ? anonymizePersonalPatient(p) : undefined;
 }
 
-export async function createPersonalPatient(data: { userId: number; firstName: string; lastName: string; dateOfBirth?: string; gender?: "M" | "F"; phone?: string; status?: "stable" | "modere" | "critique"; diagnosis?: string; allergies?: string; antecedents?: string; serviceName?: string; bedNumber?: number }) {
+export async function createPersonalPatient(data: { userId: number; firstName: string; lastName: string; dateOfBirth?: string; gender?: "M" | "F"; phone?: string; status?: "stable" | "modere" | "critique"; diagnosis?: string; allergies?: string; antecedents?: string; serviceName?: string; bedNumber?: number; encounterType?: "consultation" | "hospitalisation"; anonymousCode?: string; sourcePatientId?: number }) {
   const db = getDb();
-  const [{ id }] = await db.insert(personalPatients).values(data).returning({ id: personalPatients.id });
+  const [{ id }] = await db.insert(personalPatients).values({
+    ...data,
+    firstName: toInitial(data.firstName),
+    lastName: toInitial(data.lastName),
+    dateOfBirth: undefined,
+    phone: undefined,
+  }).returning({ id: personalPatients.id });
   return id;
+}
+
+export async function personalPatientExistsForSource(userId: number, sourcePatientId: number) {
+  const db = getDb();
+  const [row] = await db.select({ id: personalPatients.id }).from(personalPatients)
+    .where(and(eq(personalPatients.userId, userId), eq(personalPatients.sourcePatientId, sourcePatientId)));
+  return row?.id ?? null;
 }
 
 export async function updatePersonalPatient(id: number, userId: number, data: { status?: "stable" | "modere" | "critique"; diagnosis?: string; discharged?: boolean }) {

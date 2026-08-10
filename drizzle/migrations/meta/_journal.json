@@ -36,6 +36,20 @@
       "when": 1786107600000,
       "tag": "0004_patient_care_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786111200000,
+      "tag": "0005_care_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786280400000,
+      "tag": "0006_stage_guard_workflow",
+      "breakpoints": true
     }
   ]
 }

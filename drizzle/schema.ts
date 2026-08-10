@@ -12,6 +12,9 @@ export const users = pgTable("users", {
   loginMethod: text("loginMethod"),
   role: text("role").$type<"user" | "admin">().default("user").notNull(),
   medicalRole: text("medicalRole").$type<"externe" | "interne" | "resident" | "medecin">().default("interne"),
+  medicalRoleVerified: boolean("medicalRoleVerified").default(false).notNull(),
+  medicalRoleVerifiedById: integer("medicalRoleVerifiedById"),
+  medicalRoleVerifiedAt: timestamp("medicalRoleVerifiedAt"),
   hospitalId: integer("hospitalId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -137,6 +140,28 @@ export const activityLog = pgTable("activity_log", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// Décisions à fort impact préparées par un étudiant/interne puis validées
+// par un résident ou un médecin du même service.
+export const careDecisionProposals = pgTable("care_decision_proposals", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("serviceId").notNull(),
+  subjectType: text("subjectType").$type<"patient" | "consultation">().notNull(),
+  subjectId: integer("subjectId").notNull(),
+  decisionType: text("decisionType").$type<"sortie" | "refere" | "hospitalise">().notNull(),
+  destination: text("destination"),
+  reason: text("reason"),
+  bedNumber: integer("bedNumber"),
+  patientStatus: text("patientStatus").$type<"stable" | "modere" | "critique">(),
+  urgency: text("urgency").$type<"normal" | "urgent">().default("normal").notNull(),
+  assignedReviewerId: integer("assignedReviewerId"),
+  status: text("proposalStatus").$type<"pending" | "approved" | "rejected">().default("pending").notNull(),
+  proposedById: integer("proposedById").notNull(),
+  reviewedById: integer("reviewedById"),
+  reviewNote: text("reviewNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewedAt"),
+});
+
 export const releves = pgTable("releves", {
   id: serial("id").primaryKey(),
   serviceId: integer("serviceId").notNull(),
@@ -175,6 +200,37 @@ export const clinicalNotes = pgTable("clinical_notes", {
   type: text("noteType").$type<"dar" | "soap" | "libre">().default("dar").notNull(),
   content: text("content").notNull(),
   createdById: integer("createdById").notNull(),
+  supersedesNoteId: integer("supersedesNoteId"),
+  correctionReason: text("correctionReason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const guards = pgTable("guards", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("serviceId").notNull(),
+  startsAt: timestamp("startsAt").notNull(),
+  endsAt: timestamp("endsAt").notNull(),
+  supervisorId: integer("supervisorId"),
+  status: text("guardStatus").$type<"scheduled" | "active" | "ended">().default("scheduled").notNull(),
+  summary: text("summary"),
+  createdById: integer("createdById").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const guardMembers = pgTable("guard_members", {
+  id: serial("id").primaryKey(),
+  guardId: integer("guardId").notNull(),
+  userId: integer("userId").notNull(),
+  dutyRole: text("dutyRole").$type<"student" | "clinician" | "supervisor">().default("student").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const guardAssignments = pgTable("guard_assignments", {
+  id: serial("id").primaryKey(),
+  guardId: integer("guardId").notNull(),
+  patientId: integer("patientId").notNull(),
+  assignedToId: integer("assignedToId").notNull(),
+  notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -232,6 +288,9 @@ export const personalPatients = pgTable("personal_patients", {
   antecedents: text("antecedents"),
   serviceName: text("serviceName"),
   bedNumber: integer("bedNumber"),
+  encounterType: text("encounterType").$type<"consultation" | "hospitalisation">().default("hospitalisation").notNull(),
+  anonymousCode: text("anonymousCode"),
+  sourcePatientId: integer("sourcePatientId"),
   discharged: boolean("discharged").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -292,5 +351,23 @@ export const competences = pgTable("competences", {
   validatedById: integer("validatedById"),
   validatedAt: text("validatedAt"),
   notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const procedures = pgTable("procedures", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  rotationId: integer("rotationId"),
+  personalPatientId: integer("personalPatientId"),
+  title: text("title").notNull(),
+  performedAt: timestamp("performedAt").defaultNow().notNull(),
+  participationLevel: text("participationLevel").$type<"observed" | "assisted" | "supervised" | "autonomous">().notNull(),
+  outcome: text("outcome").$type<"success" | "partial" | "failed">(),
+  attempts: integer("attempts").default(1),
+  reflection: text("reflection"),
+  validated: boolean("validated").default(false),
+  validatedById: integer("validatedById"),
+  validatedAt: timestamp("validatedAt"),
+  validatorComment: text("validatorComment"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

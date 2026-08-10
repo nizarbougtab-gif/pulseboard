@@ -11,7 +11,7 @@ import {
   Plus, Bed, LogOut, User, ChevronRight,
   Stethoscope, LayoutGrid, BookOpen, Users, AlertCircle, GraduationCap, UserPlus, Copy, Check
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import CreateServiceDialog from "@/components/CreateServiceDialog";
 import BottomNav from "@/components/BottomNav";
@@ -27,9 +27,17 @@ export default function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [copied, setCopied] = useState<number | null>(null);
 
+  useEffect(() => {
+    const invitationCode = new URLSearchParams(window.location.search).get("join");
+    if (invitationCode) {
+      setJoinCode(invitationCode.toUpperCase());
+      setShowJoinDialog(true);
+    }
+  }, []);
+
   const joinService = trpc.membership.join.useMutation({
     onSuccess: (result) => {
-      if (result.status === "joined") { toast.success("Vous avez rejoint le service !"); setShowJoinDialog(false); setJoinCode(""); utils.services.list.invalidate(); }
+      if (result.status === "joined") { toast.success("Accès immédiat au hall du service !"); setShowJoinDialog(false); setJoinCode(""); window.history.replaceState({}, "", "/dashboard"); utils.services.list.invalidate(); }
       else if (result.status === "pending") { toast.info("Demande envoyée — en attente d'approbation du chef de service"); setShowJoinDialog(false); setJoinCode(""); }
       else if (result.status === "already_member") { toast.info("Vous êtes déjà membre de ce service"); }
     },

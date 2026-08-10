@@ -85,15 +85,16 @@ export default function Profile() {
               <Label className="flex items-center gap-2">
                 <Stethoscope className="w-4 h-4" /> Rôle médical
               </Label>
-              <Select value={medicalRole} onValueChange={setMedicalRole}>
+              <Select value={medicalRole} onValueChange={setMedicalRole} disabled={Boolean((user as any)?.medicalRoleVerified)}>
                 <SelectTrigger><SelectValue placeholder="Choisir un rôle" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="externe">Externe</SelectItem>
+                  <SelectItem value="externe">Étudiant / Externe (6e–8e année)</SelectItem>
                   <SelectItem value="interne">Interne</SelectItem>
                   <SelectItem value="resident">Résident</SelectItem>
                   <SelectItem value="medecin">Médecin</SelectItem>
                 </SelectContent>
               </Select>
+              {(user as any)?.medicalRoleVerified && <p className="text-xs text-[var(--pulseboard-green)]">✓ Rôle confirmé par un chef de service — modification verrouillée</p>}
             </div>
 
             <div className="space-y-2">
