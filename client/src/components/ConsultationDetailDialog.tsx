@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward, LogOut } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const EXAMENS_COMMUNS = [
   "NFS", "CRP", "VS", "Glycémie", "Urée", "Créatinine",
@@ -38,6 +39,10 @@ interface Props {
 }
 
 export default function ConsultationDetailDialog({ open, onOpenChange, consultation }: Props) {
+  const { can } = useAuth();
+  const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId: consultation.serviceId }, { enabled: open });
+  const canApplyDecision = can("patient.discharge") && memberRole !== undefined && memberRole !== "stagiaire";
+  const canHospitalize = can("patient.admit") && memberRole !== undefined && memberRole !== "stagiaire";
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
   const [rapport, setRapport] = useState(consultation.rapport || "");
@@ -98,6 +103,17 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
     onSuccess: () => {
       utils.consultations.list.invalidate({ serviceId: consultation.serviceId });
       toast.success("Sortie enregistrée");
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const proposeDecision = trpc.decisionProposals.create.useMutation({
+    onSuccess: () => {
+      utils.decisionProposals.list.invalidate({ serviceId: consultation.serviceId, pendingOnly: true });
+      toast.success("Proposition envoyée pour validation");
+      setShowHospitalize(false);
+      setShowReferral(false);
       onOpenChange(false);
     },
     onError: (error) => toast.error(error.message),
@@ -238,9 +254,13 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Annuler</Button>
           {!consultation.disposition && !consultation.linkedPatientId && <>
             <Button variant="outline" className="text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" disabled={dischargeConsultation.isPending} onClick={() => {
-              if (confirm("Confirmer la sortie après cette consultation ?")) dischargeConsultation.mutate({ id: consultation.id });
+              if (canApplyDecision) {
+                if (confirm("Confirmer la sortie après cette consultation ?")) dischargeConsultation.mutate({ id: consultation.id });
+              } else if (confirm("Envoyer cette proposition de sortie pour validation ?")) {
+                proposeDecision.mutate({ serviceId: consultation.serviceId, subjectType: "consultation", subjectId: consultation.id, decisionType: "sortie" });
+              }
             }}>
-              <LogOut className="w-4 h-4 mr-1" /> Faire sortir
+              <LogOut className="w-4 h-4 mr-1" /> {canApplyDecision ? "Faire sortir" : "Proposer la sortie"}
             </Button>
             <Button variant="outline" onClick={() => setShowReferral(true)}>
               <Forward className="w-4 h-4 mr-1" /> Référer
@@ -292,8 +312,12 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setShowHospitalize(false)}>Annuler</Button>
-          <Button disabled={hospitalize.isPending} onClick={() => hospitalize.mutate({ id: consultation.id, bedNumber: hospitalBed ? parseInt(hospitalBed) : undefined, status: hospitalStatus })}>
-            {hospitalize.isPending ? "Hospitalisation..." : "Confirmer l'hospitalisation"}
+          <Button disabled={hospitalize.isPending || proposeDecision.isPending} onClick={() => {
+            const details = { bedNumber: hospitalBed ? parseInt(hospitalBed) : undefined, patientStatus: hospitalStatus };
+            if (canHospitalize) hospitalize.mutate({ id: consultation.id, bedNumber: details.bedNumber, status: hospitalStatus });
+            else proposeDecision.mutate({ serviceId: consultation.serviceId, subjectType: "consultation", subjectId: consultation.id, decisionType: "hospitalise", ...details });
+          }}>
+            {hospitalize.isPending || proposeDecision.isPending ? "Envoi..." : canHospitalize ? "Confirmer l'hospitalisation" : "Envoyer pour validation"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -311,8 +335,12 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setShowReferral(false)}>Annuler</Button>
-          <Button disabled={referConsultation.isPending || referralDestination.trim().length < 2 || referralReason.trim().length < 2} onClick={() => referConsultation.mutate({ id: consultation.id, destination: referralDestination.trim(), reason: referralReason.trim() })}>
-            {referConsultation.isPending ? "Référence..." : "Confirmer la référence"}
+          <Button disabled={referConsultation.isPending || proposeDecision.isPending || referralDestination.trim().length < 2 || referralReason.trim().length < 2} onClick={() => {
+            const details = { destination: referralDestination.trim(), reason: referralReason.trim() };
+            if (canApplyDecision) referConsultation.mutate({ id: consultation.id, ...details });
+            else proposeDecision.mutate({ serviceId: consultation.serviceId, subjectType: "consultation", subjectId: consultation.id, decisionType: "refere", ...details });
+          }}>
+            {referConsultation.isPending || proposeDecision.isPending ? "Envoi..." : canApplyDecision ? "Confirmer la référence" : "Envoyer pour validation"}
           </Button>
         </DialogFooter>
       </DialogContent>

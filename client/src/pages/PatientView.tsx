@@ -47,9 +47,15 @@ export default function PatientView() {
   const [referralReason, setReferralReason] = useState("");
   const [showBedDialog, setShowBedDialog] = useState(false);
   const [selectedBed, setSelectedBed] = useState("");
+  const [showCorrectionDialog, setShowCorrectionDialog] = useState(false);
+  const [correctionNoteId, setCorrectionNoteId] = useState<number | null>(null);
+  const [correctionContent, setCorrectionContent] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
 
   const { data: patient, isLoading } = trpc.patients.get.useQuery({ id: patientId }, { enabled: patientId > 0 });
   const patientServiceId = patient?.serviceId ?? 0;
+  const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId: patientServiceId }, { enabled: patientServiceId > 0 });
+  const canApplyDecision = can("patient.discharge") && memberRole !== undefined && memberRole !== "stagiaire";
   const { data: service } = trpc.services.get.useQuery({ id: patientServiceId }, { enabled: patientServiceId > 0 });
   const { data: servicePatients = [] } = trpc.patients.list.useQuery(
     { serviceId: patientServiceId, filter: "tous" },
@@ -130,6 +136,30 @@ export default function PatientView() {
       navigate(`/service/${patient?.serviceId}`);
     },
     onError: (error) => toast.error(error.message),
+  });
+
+  const proposeDecision = trpc.decisionProposals.create.useMutation({
+    onSuccess: () => {
+      toast.success("Proposition envoyée pour validation");
+      setShowReferralDialog(false);
+      setReferralDestination("");
+      setReferralReason("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const importToStage = trpc.personalPatients.importFromCollective.useMutation({
+    onSuccess: result => toast.success(result.alreadyExists ? "Ce cas est déjà dans votre carnet" : "Cas ajouté au carnet sous forme anonymisée"),
+    onError: error => toast.error(error.message),
+  });
+
+  const correctNote = trpc.notes.correct.useMutation({
+    onSuccess: () => {
+      utils.notes.byPatient.invalidate({ patientId });
+      setShowCorrectionDialog(false); setCorrectionNoteId(null); setCorrectionContent(""); setCorrectionReason("");
+      toast.success("Correction ajoutée sans supprimer la note originale");
+    },
+    onError: error => toast.error(error.message),
   });
 
   const getDaysSince = (date: Date | string) => Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
@@ -221,14 +251,21 @@ export default function PatientView() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {!patient.actualDischarge && can("patient.discharge") && <>
+            <Button variant="outline" size="sm" disabled={importToStage.isPending} onClick={() => importToStage.mutate({ patientId, encounterType: "hospitalisation" })}>
+              <BookOpen className="w-4 h-4 mr-1" /> Ajouter à mon carnet
+            </Button>
+            {!patient.actualDischarge && (canApplyDecision || can("patient.proposeDecision")) && <>
               <Button variant="outline" size="sm" onClick={() => setShowReferralDialog(true)}>
-                <Forward className="w-4 h-4 mr-1" /> Référer
+                <Forward className="w-4 h-4 mr-1" /> {canApplyDecision ? "Référer" : "Proposer une référence"}
               </Button>
               <Button variant="outline" size="sm" className="text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" onClick={() => {
-                if (confirm("Confirmer la sortie de ce patient ?")) dischargePatient.mutate({ id: patientId });
+                if (canApplyDecision) {
+                  if (confirm("Confirmer la sortie de ce patient ?")) dischargePatient.mutate({ id: patientId });
+                } else if (confirm("Envoyer cette proposition au résident ou au médecin ?")) {
+                  proposeDecision.mutate({ serviceId: patient.serviceId, subjectType: "patient", subjectId: patientId, decisionType: "sortie" });
+                }
               }}>
-                <LogOut className="w-4 h-4 mr-1" /> Faire sortir
+                <LogOut className="w-4 h-4 mr-1" /> {canApplyDecision ? "Faire sortir" : "Proposer la sortie"}
               </Button>
             </>}
             <span className={`day-badge ${days >= 10 ? "old" : days >= 5 ? "mid" : "fresh"}`}>J+{days}</span>
@@ -258,14 +295,14 @@ export default function PatientView() {
                     Passer en Critique
                   </DropdownMenuItem>
                 </>)}
-                {!patient.actualDischarge && can("patient.discharge") && (
+                {!patient.actualDischarge && canApplyDecision && (
                   <DropdownMenuItem className="text-[var(--pulseboard-red)]" onClick={() => {
                     if (confirm("Confirmer la sortie de ce patient ?")) dischargePatient.mutate({ id: patientId });
                   }}>
                     Sortie du patient
                   </DropdownMenuItem>
                 )}
-                {!patient.actualDischarge && can("patient.discharge") && (
+                {!patient.actualDischarge && canApplyDecision && (
                   <DropdownMenuItem onClick={() => setShowReferralDialog(true)}>
                     Référer le patient
                   </DropdownMenuItem>
@@ -398,11 +435,14 @@ export default function PatientView() {
                         <Badge variant="outline" className="text-[10px] uppercase font-bold">{note.type}</Badge>
                         <span className="text-xs text-muted-foreground">{note.userName}</span>
                       </div>
-                      <span className="text-[11px] text-muted-foreground">
-                        {new Date(note.createdAt).toLocaleDateString("fr-FR")} · {new Date(note.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {note.supersedesNoteId && <Badge className="bg-amber-100 text-amber-800 text-[10px]">Correction de #{note.supersedesNoteId}</Badge>}
+                        <span className="text-[11px] text-muted-foreground">{new Date(note.createdAt).toLocaleDateString("fr-FR")} · {new Date(note.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
                     </div>
                     <div className="whitespace-pre-wrap text-sm leading-relaxed bg-[#f7f8f6] rounded-lg p-3">{note.content}</div>
+                    {note.correctionReason && <p className="text-xs text-amber-800 mt-2">Motif de correction : {note.correctionReason}</p>}
+                    {can("note.create") && !note.supersedesNoteId && <button className="mt-2 text-xs text-[var(--pulseboard-green)]" onClick={() => { setCorrectionNoteId(note.id); setCorrectionContent(note.content); setShowCorrectionDialog(true); }}>Corriger cette note</button>}
                   </div>
                 ))}
                 {can("note.create") && (
@@ -610,9 +650,28 @@ export default function PatientView() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowReferralDialog(false)}>Annuler</Button>
-            <Button disabled={referPatient.isPending || referralDestination.trim().length < 2 || referralReason.trim().length < 2} onClick={() => referPatient.mutate({ id: patientId, destination: referralDestination.trim(), reason: referralReason.trim() })}>
-              {referPatient.isPending ? "Référence..." : "Confirmer la référence"}
+            <Button disabled={referPatient.isPending || proposeDecision.isPending || referralDestination.trim().length < 2 || referralReason.trim().length < 2} onClick={() => {
+              const details = { destination: referralDestination.trim(), reason: referralReason.trim() };
+              if (canApplyDecision) referPatient.mutate({ id: patientId, ...details });
+              else proposeDecision.mutate({ serviceId: patient.serviceId, subjectType: "patient", subjectId: patientId, decisionType: "refere", ...details });
+            }}>
+              {referPatient.isPending || proposeDecision.isPending ? "Envoi..." : canApplyDecision ? "Confirmer la référence" : "Envoyer pour validation"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCorrectionDialog} onOpenChange={setShowCorrectionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Corriger la note sans l’effacer</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Nouvelle version</Label><Textarea rows={6} value={correctionContent} onChange={e => setCorrectionContent(e.target.value)} /></div>
+            <div><Label>Motif de la correction *</Label><Input value={correctionReason} onChange={e => setCorrectionReason(e.target.value)} placeholder="Ex. précision clinique ou erreur de saisie" /></div>
+            <p className="text-xs text-muted-foreground">La version originale restera visible dans l’historique.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowCorrectionDialog(false)}>Annuler</Button>
+            <Button disabled={!correctionNoteId || correctionContent.trim().length < 1 || correctionReason.trim().length < 3 || correctNote.isPending} onClick={() => correctionNoteId && correctNote.mutate({ noteId: correctionNoteId, content: correctionContent, reason: correctionReason })}>Enregistrer la correction</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

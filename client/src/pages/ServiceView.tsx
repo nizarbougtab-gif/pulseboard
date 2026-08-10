@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   Bed, Search, Plus, AlertCircle, Clock, ClipboardList,
@@ -22,7 +23,7 @@ import BottomNav from "@/components/BottomNav";
 import ServiceChat from "@/components/ServiceChat";
 import RelevePanel from "@/components/RelevePanel";
 
-type TabType = "lits" | "garde" | "consult" | "releve";
+type TabType = "lits" | "garde" | "messages" | "consult" | "releve";
 type FilterType = "tous" | "urgents" | "sortie_prevue" | "sortis";
 
 export default function ServiceView() {
@@ -44,14 +45,25 @@ export default function ServiceView() {
   const [codeCopied, setCodeCopied] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const [consultForm, setConsultForm] = useState({ firstName: "", lastName: "", motif: "", notes: "" });
+  const [showGuardDialog, setShowGuardDialog] = useState(false);
+  const [guardForm, setGuardForm] = useState({ startsAt: "", endsAt: "", supervisorId: "" });
+  const [guardAssignment, setGuardAssignment] = useState({ guardId: "", patientId: "", assignedToId: "", notes: "" });
 
   const { data: service, isLoading: serviceLoading } = trpc.services.get.useQuery({ id: serviceId }, { enabled: serviceId > 0 });
   const { data: patients = [], isLoading: patientsLoading } = trpc.patients.list.useQuery({ serviceId, filter }, { enabled: serviceId > 0 });
   const { data: alerts = [] } = trpc.alerts.byService.useQuery({ serviceId, onlyActive: true }, { enabled: serviceId > 0 });
   const { data: consultations = [] } = trpc.consultations.list.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const { data: decisionProposals = [] } = trpc.decisionProposals.list.useQuery(
+    { serviceId, pendingOnly: true },
+    { enabled: serviceId > 0 }
+  );
   const { data: hospitals = [] } = trpc.hospitals.list.useQuery();
   const { data: isChef } = trpc.membership.isChef.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const hasConfirmedRole = memberRole !== undefined && memberRole !== "stagiaire";
   const { data: pendingRequests = [] } = trpc.membership.pendingRequests.useQuery({ serviceId }, { enabled: !!isChef });
+  const { data: members = [] } = trpc.services.members.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const { data: guards = [] } = trpc.guards.list.useQuery({ serviceId }, { enabled: serviceId > 0 });
 
   const utils = trpc.useUtils();
 
@@ -67,7 +79,7 @@ export default function ServiceView() {
   const resolveRequest = trpc.membership.resolve.useMutation({
     onSuccess: (_, vars) => {
       utils.membership.pendingRequests.invalidate({ serviceId });
-      toast.success(vars.approved ? "Externe accepté" : "Demande refusée");
+      toast.success(vars.approved ? "Membre accepté avec ses autorisations" : "Demande refusée");
     },
   });
 
@@ -93,6 +105,28 @@ export default function ServiceView() {
       utils.alerts.byService.invalidate({ serviceId, onlyActive: true });
       toast.success("Alerte marquée comme traitée");
     },
+  });
+
+  const reviewDecision = trpc.decisionProposals.review.useMutation({
+    onSuccess: (_, variables) => {
+      utils.decisionProposals.list.invalidate({ serviceId, pendingOnly: true });
+      utils.patients.list.invalidate({ serviceId });
+      utils.consultations.list.invalidate({ serviceId });
+      toast.success(variables.approved ? "Décision validée" : "Proposition refusée");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const createGuard = trpc.guards.create.useMutation({
+    onSuccess: () => { utils.guards.list.invalidate({ serviceId }); setShowGuardDialog(false); setGuardForm({ startsAt: "", endsAt: "", supervisorId: "" }); toast.success("Garde planifiée"); },
+    onError: error => toast.error(error.message),
+  });
+  const setGuardStatus = trpc.guards.setStatus.useMutation({
+    onSuccess: () => { utils.guards.list.invalidate({ serviceId }); toast.success("Garde mise à jour"); },
+    onError: error => toast.error(error.message),
+  });
+  const assignGuardPatient = trpc.guards.assignPatient.useMutation({
+    onSuccess: () => { utils.guards.list.invalidate({ serviceId }); setGuardAssignment({ guardId: "", patientId: "", assignedToId: "", notes: "" }); toast.success("Patient attribué pour la garde"); },
+    onError: error => toast.error(error.message),
   });
 
   const hospital = useMemo(() => {
@@ -207,7 +241,7 @@ export default function ServiceView() {
             </button>
           )}
         </div>
-        <div className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border/50">MEDBOARD &copy; 2026</div>
+        <div className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border/50">PULSEBOARD &copy; 2026</div>
       </aside>
 
       {/* Main content */}
@@ -222,7 +256,7 @@ export default function ServiceView() {
             <div className="flex items-center gap-2 flex-wrap">
               <Stethoscope className="w-4 h-4 text-[var(--pulseboard-green)]" />
               <h1 className="font-semibold text-base">{service.name}</h1>
-              {(service as any).code && isChef && (
+              {(service as any).code && hasConfirmedRole && (
                 <button
                   onClick={() => { navigator.clipboard.writeText((service as any).code); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-xs font-mono text-muted-foreground transition-colors"
@@ -230,6 +264,18 @@ export default function ServiceView() {
                 >
                   {(service as any).code}
                   {codeCopied ? <Check className="w-3 h-3 text-[var(--pulseboard-green)]" /> : <Copy className="w-3 h-3" />}
+                </button>
+              )}
+              {(service as any).code && hasConfirmedRole && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/dashboard?join=${(service as any).code}`);
+                    toast.success("Lien d’invitation copié");
+                  }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--pulseboard-green-light)] hover:opacity-80 text-xs text-[var(--pulseboard-green)] transition-colors"
+                  title="Copier le lien d’invitation"
+                >
+                  <Users className="w-3 h-3" /> Inviter
                 </button>
               )}
               {pendingRequests.length > 0 && (
@@ -243,7 +289,12 @@ export default function ServiceView() {
               <div className="mt-2 space-y-1.5">
                 {pendingRequests.map((r: any) => (
                   <div key={r.id} className="flex items-center gap-2 text-xs bg-[var(--pulseboard-amber-light)] rounded-lg px-3 py-2">
-                    <span className="flex-1 font-medium">{r.userName} <span className="text-muted-foreground font-normal">demande à rejoindre</span></span>
+                    <span className="flex-1 font-medium">
+                      {r.userName}
+                      <span className="ml-1 text-muted-foreground font-normal">
+                        ({r.medicalRole === "externe" ? "Étudiant / Externe" : r.medicalRole === "interne" ? "Interne" : r.medicalRole === "resident" ? "Résident" : "Médecin"}) demande à rejoindre
+                      </span>
+                    </span>
                     <button onClick={() => resolveRequest.mutate({ requestId: r.id, approved: true })} className="text-[var(--pulseboard-green)] hover:opacity-70"><Check className="w-4 h-4" /></button>
                     <button onClick={() => resolveRequest.mutate({ requestId: r.id, approved: false })} className="text-[var(--pulseboard-red)] hover:opacity-70"><X className="w-4 h-4" /></button>
                   </div>
@@ -275,7 +326,7 @@ export default function ServiceView() {
               className="pl-9 h-8 w-52 text-sm"
             />
           </div>
-          {can("patient.admit") && (
+          {can("patient.admit") && hasConfirmedRole && (
             <Button
               size="sm"
               className="bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white h-8"
@@ -291,7 +342,8 @@ export default function ServiceView() {
       <div className="border-b bg-white px-6 flex items-center gap-6 shrink-0">
         {[
           { key: "lits" as TabType, label: "Lits", icon: Bed },
-          { key: "garde" as TabType, label: "Messages", icon: Clock },
+          { key: "garde" as TabType, label: "Garde", icon: Clock },
+          { key: "messages" as TabType, label: `Messages${decisionProposals.length ? ` · ${decisionProposals.length}` : ""}`, icon: Users },
           { key: "consult" as TabType, label: "Consult.", icon: ClipboardList },
           { key: "releve" as TabType, label: "Relève", icon: ClipboardList },
         ].map(tab => (
@@ -434,7 +486,63 @@ export default function ServiceView() {
         )}
 
         {activeTab === "garde" && (
+          <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between"><div><h2 className="font-semibold">Organisation des gardes</h2><p className="text-xs text-muted-foreground">Horaires, superviseur, équipe et patients attribués.</p></div>{can("guard.manage") && hasConfirmedRole && <Button size="sm" className="bg-[var(--pulseboard-green)] text-white" onClick={() => setShowGuardDialog(true)}><Plus className="w-4 h-4 mr-1" /> Planifier</Button>}</div>
+            {guards.length === 0 ? <div className="bg-white border border-dashed rounded-xl py-12 text-center text-muted-foreground"><Clock className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Aucune garde planifiée</p></div> : guards.map(guard => (
+              <div key={guard.id} className={`bg-white rounded-xl border p-4 ${guard.status === "active" ? "border-[var(--pulseboard-green)]" : "border-border/50"}`}>
+                <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="font-semibold text-sm">Garde du {new Date(guard.startsAt).toLocaleDateString("fr-FR")}</h3><Badge className={guard.status === "active" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : guard.status === "ended" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-800"}>{guard.status === "active" ? "En cours" : guard.status === "ended" ? "Terminée" : "Planifiée"}</Badge></div><p className="text-xs text-muted-foreground mt-1">{new Date(guard.startsAt).toLocaleString("fr-FR")} → {new Date(guard.endsAt).toLocaleString("fr-FR")}</p></div>{can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="flex gap-2">{guard.status === "scheduled" && <Button size="sm" className="bg-[var(--pulseboard-green)] text-white" onClick={() => setGuardStatus.mutate({ id: guard.id, status: "active" })}>Commencer la garde</Button>}{guard.status === "active" && <Button size="sm" variant="outline" onClick={() => { const summary = prompt("Résumé obligatoire de fin de garde :"); if (summary?.trim()) setGuardStatus.mutate({ id: guard.id, status: "ended", summary }); }}>Terminer la garde</Button>}</div>}</div>
+                <div className="mt-3"><p className="text-xs font-semibold mb-1">Équipe</p><div className="flex flex-wrap gap-1">{guard.members.map((m:any) => <Badge key={m.id} variant="outline">{m.userName || `Membre #${m.userId}`} · {m.dutyRole === "student" ? "Étudiant" : m.dutyRole === "supervisor" ? "Superviseur" : "Clinicien"}</Badge>)}</div></div>
+                <div className="mt-3"><p className="text-xs font-semibold mb-1">Patients attribués</p>{guard.assignments.length ? guard.assignments.map((a:any) => <div key={a.id} className="text-xs bg-gray-50 rounded-lg p-2 mb-1">Lit {a.bedNumber || "—"} · {a.patientFirstName} {a.patientLastName} → membre #{a.assignedToId}{a.notes ? ` · ${a.notes}` : ""}</div>) : <p className="text-xs text-muted-foreground">Aucun patient attribué.</p>}</div>
+                {can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mt-3"><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.patientId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), patientId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Patient" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir patient</SelectItem>{patients.filter(p=>!p.actualDischarge).map(p=><SelectItem key={p.id} value={String(p.id)}>Lit {p.bedNumber || "—"} · {p.firstName} {p.lastName}</SelectItem>)}</SelectContent></Select><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.assignedToId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), assignedToId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Membre" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir membre</SelectItem>{guard.members.map((m:any)=><SelectItem key={m.userId} value={String(m.userId)}>{m.userName || `Membre #${m.userId}`}</SelectItem>)}</SelectContent></Select><Input placeholder="Consigne" value={guardAssignment.guardId === String(guard.id) ? guardAssignment.notes : ""} onChange={e => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), notes: e.target.value }))} /><Button disabled={guardAssignment.guardId !== String(guard.id) || !guardAssignment.patientId || !guardAssignment.assignedToId || assignGuardPatient.isPending} onClick={() => assignGuardPatient.mutate({ guardId: guard.id, patientId: Number(guardAssignment.patientId), assignedToId: Number(guardAssignment.assignedToId), notes: guardAssignment.notes || undefined })}>Attribuer</Button></div>}
+                {guard.summary && <div className="mt-3 text-xs bg-[var(--pulseboard-green-light)] rounded-lg p-3"><b>Résumé :</b> {guard.summary}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === "messages" && (
           <div className="p-6">
+            {decisionProposals.length > 0 && (
+              <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-amber-900">Décisions en attente</h2>
+                    <p className="text-xs text-amber-800">Propositions de l'équipe à vérifier avant application.</p>
+                  </div>
+                  <Badge className="bg-amber-100 text-amber-800">{decisionProposals.length}</Badge>
+                </div>
+                <div className="space-y-2">
+                  {decisionProposals.map(proposal => (
+                    <div key={proposal.id} className="rounded-lg border border-amber-200 bg-white p-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">
+                          {proposal.decisionType === "sortie" ? "Sortie" : proposal.decisionType === "refere" ? "Référence" : "Hospitalisation"}
+                          {` · ${proposal.subjectName}${proposal.subjectBedNumber ? ` · lit ${proposal.subjectBedNumber}` : ""}`}
+                          {proposal.urgency === "urgent" && <Badge className="ml-2 bg-red-100 text-red-700">Urgent</Badge>}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Proposé par {proposal.proposerName || "un membre"} · {new Date(proposal.createdAt).toLocaleString("fr-FR")}
+                        </p>
+                        {proposal.destination && <p className="text-xs mt-1">Destination : {proposal.destination}</p>}
+                        {proposal.reason && <p className="text-xs text-muted-foreground truncate">Motif : {proposal.reason}</p>}
+                      </div>
+                      {can("decision.review") && hasConfirmedRole ? (
+                        <div className="flex gap-2 shrink-0">
+                          <Button size="sm" variant="outline" disabled={reviewDecision.isPending} onClick={() => { const reviewNote = prompt("Pourquoi refusez-vous cette proposition ? (obligatoire)"); if (reviewNote?.trim()) reviewDecision.mutate({ id: proposal.id, approved: false, reviewNote }); }}>
+                            <X className="w-3.5 h-3.5 mr-1" /> Refuser
+                          </Button>
+                          <Button size="sm" className="bg-[var(--pulseboard-green)] text-white" disabled={reviewDecision.isPending} onClick={() => reviewDecision.mutate({ id: proposal.id, approved: true })}>
+                            <Check className="w-3.5 h-3.5 mr-1" /> Valider
+                          </Button>
+                        </div>
+                      ) : (
+                        <Badge variant="outline">Validation senior requise</Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <ServiceChat serviceId={serviceId} isOpen={true} onClose={() => setActiveTab("lits")} inline />
           </div>
         )}
@@ -586,7 +694,7 @@ export default function ServiceView() {
                               <User className="mr-1 h-3.5 w-3.5" /> Voir le patient
                             </Button>
                           )}
-                          <Button
+                          {can("alert.resolve") && <Button
                             type="button"
                             size="sm"
                             variant="ghost"
@@ -595,7 +703,7 @@ export default function ServiceView() {
                             onClick={() => resolveAlert.mutate({ id: alert.id })}
                           >
                             <CheckCircle className="mr-1 h-3.5 w-3.5" /> Marquer comme traitée
-                          </Button>
+                          </Button>}
                         </div>
                       </div>
                     </div>
@@ -605,6 +713,10 @@ export default function ServiceView() {
             )}
           </div>
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={showGuardDialog} onOpenChange={setShowGuardDialog}>
+        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Planifier une garde</DialogTitle></DialogHeader><div className="space-y-3"><div><Label>Début *</Label><Input type="datetime-local" value={guardForm.startsAt} onChange={e => setGuardForm(f => ({ ...f, startsAt: e.target.value }))} /></div><div><Label>Fin *</Label><Input type="datetime-local" value={guardForm.endsAt} onChange={e => setGuardForm(f => ({ ...f, endsAt: e.target.value }))} /></div><div><Label>Superviseur</Label><Select value={guardForm.supervisorId || "none"} onValueChange={v => setGuardForm(f => ({ ...f, supervisorId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">À définir</SelectItem>{members.filter((m:any)=>m.role!=="stagiaire").map((m:any)=><SelectItem key={m.userId} value={String(m.userId)}>{m.userName} · {m.medicalRole}</SelectItem>)}</SelectContent></Select></div><div className="flex gap-2"><Button variant="outline" className="flex-1" onClick={() => setShowGuardDialog(false)}>Annuler</Button><Button className="flex-1 bg-[var(--pulseboard-green)] text-white" disabled={!guardForm.startsAt || !guardForm.endsAt || createGuard.isPending} onClick={() => createGuard.mutate({ serviceId, startsAt: guardForm.startsAt, endsAt: guardForm.endsAt, supervisorId: guardForm.supervisorId ? Number(guardForm.supervisorId) : undefined, memberIds: members.map((m:any)=>m.userId) })}>Planifier</Button></div></div></DialogContent>
       </Dialog>
 
       <AdmitPatientDialog
