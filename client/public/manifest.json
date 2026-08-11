@@ -1,9 +1,12 @@
 {
   "name": "PulseBoard — Sénégal",
   "short_name": "PulseBoard",
+  "id": "/",
   "description": "L'outil de gestion médicale pensé pour les équipes soignantes sénégalaises. Relève, patients, alertes.",
-  "start_url": "/dashboard",
+  "start_url": "/dashboard?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#ffffff",
   "theme_color": "#00853F",
   "lang": "fr",
