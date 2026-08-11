@@ -10,6 +10,7 @@
     <meta name="description" content="PulseBoard — L'outil de gestion médicale pensé pour les équipes soignantes sénégalaises. Relève, patients, alertes. Tout en un." />
     <meta name="theme-color" content="#00853F" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="PulseBoard" />
     <link rel="manifest" href="/manifest.json" />
@@ -30,7 +31,9 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((registration) => {
+            registration.update().catch(() => {});
+          }).catch(() => {});
         });
       }
     </script>
