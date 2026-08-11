@@ -247,15 +247,15 @@ export default function ServiceView() {
       {/* Main content */}
       <div className="medboard-main flex flex-col">
       {/* Top bar */}
-      <div className="border-b bg-white px-6 py-3 flex items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="border-b bg-white px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <button onClick={() => navigate("/dashboard")} className="text-muted-foreground hover:text-foreground transition-all duration-200">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <Stethoscope className="w-4 h-4 text-[var(--pulseboard-green)]" />
-              <h1 className="font-semibold text-base">{service.name}</h1>
+              <h1 className="font-semibold text-base truncate max-w-[65vw] sm:max-w-none">{service.name}</h1>
               {(service as any).code && hasConfirmedRole && (
                 <button
                   onClick={() => { navigator.clipboard.writeText((service as any).code); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
@@ -308,7 +308,7 @@ export default function ServiceView() {
           <button
             type="button"
             onClick={() => setShowAlertsDialog(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--pulseboard-red-light)] text-[var(--pulseboard-red)] text-xs font-semibold animate-pulse-alert transition-colors hover:bg-red-100"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--pulseboard-red-light)] text-[var(--pulseboard-red)] text-xs font-semibold animate-pulse-alert transition-colors hover:bg-red-100 max-sm:order-3 max-sm:w-full max-sm:justify-center"
             aria-label={`Afficher les ${alerts.length} alertes actives`}
           >
             <AlertCircle className="w-3.5 h-3.5" />
@@ -316,14 +316,14 @@ export default function ServiceView() {
           </button>
         )}
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2 max-sm:order-2 max-sm:w-full">
+          <div className="relative flex-1 sm:flex-none">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Rechercher un patient..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-9 h-8 w-52 text-sm"
+              className="pl-9 h-8 w-full sm:w-52 text-sm"
             />
           </div>
           {can("patient.admit") && hasConfirmedRole && (
@@ -335,11 +335,19 @@ export default function ServiceView() {
               <Plus className="w-3.5 h-3.5 mr-1" /> Admettre
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="md:hidden h-8 shrink-0"
+            onClick={() => setActiveTab("garde")}
+          >
+            <Clock className="w-3.5 h-3.5 mr-1" /> Garde
+          </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b bg-white px-6 flex items-center gap-6 shrink-0">
+      <div className="border-b bg-white px-3 sm:px-6 flex items-center gap-2 sm:gap-6 shrink-0 overflow-x-auto overscroll-x-contain">
         {[
           { key: "lits" as TabType, label: "Lits", icon: Bed },
           { key: "garde" as TabType, label: "Garde", icon: Clock },
@@ -350,7 +358,7 @@ export default function ServiceView() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 py-3 px-1 text-sm border-b-2 transition-all duration-200 ${
+            className={`flex shrink-0 items-center gap-2 py-3 px-2 sm:px-1 text-sm border-b-2 transition-all duration-200 ${
               activeTab === tab.key
                 ? "border-[var(--pulseboard-green)] text-[var(--pulseboard-green)] font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
