@@ -13,7 +13,7 @@ import { ROLE_LABELS, ROLE_COLORS, type MedicalRole } from "@/lib/permissions";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, BookOpen, CheckCircle, Clock, FileText,
-  Stethoscope, Award, BarChart2, ListChecks, ChevronRight, LogOut, Activity, Printer
+  Stethoscope, Award, BarChart2, ListChecks, ChevronRight, LogOut, Activity, Printer, Lock, ShieldCheck
 } from "lucide-react";
 import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
@@ -131,10 +131,10 @@ export default function MonStage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[var(--pulseboard-green)] flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
               <BookOpen className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="font-bold text-sm">Mon Stage</span>
+            <span className="font-bold text-sm">Mon carnet de stage</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -159,6 +159,13 @@ export default function MonStage() {
         )}
       </div>
 
+      <div className="px-4 pb-3 max-w-2xl mx-auto">
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center shrink-0"><ShieldCheck className="w-4 h-4" /></div>
+          <div><div className="flex items-center gap-1.5 text-xs font-semibold text-violet-900"><Lock className="w-3 h-3" /> Espace personnel et privé</div><p className="text-[11px] text-violet-800/80 mt-0.5">Vos cas sont anonymisés par initiales et ne sont pas visibles dans le hall collectif du service.</p></div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="px-4 flex gap-1 overflow-x-auto pb-1">
         {tabs.map(tab => (
@@ -167,8 +174,8 @@ export default function MonStage() {
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
               activeTab === tab.key
-                ? "bg-[var(--pulseboard-green)] text-white"
-                : "bg-white text-muted-foreground border border-border/50 hover:border-[var(--pulseboard-green)]/30"
+                ? "bg-violet-600 text-white"
+                : "bg-white text-muted-foreground border border-border/50 hover:border-violet-300"
             }`}
           >
             <tab.icon className="w-3.5 h-3.5" />
@@ -374,7 +381,7 @@ export default function MonStage() {
         {/* MES PATIENTS PERSONNELS */}
         {activeTab === "patients" && (
           <div className="space-y-3">
-            <Button size="sm" onClick={() => setShowAdmitDialog(true)} className="w-full bg-[var(--pulseboard-green)] text-white hover:bg-[var(--pulseboard-green-dark)]">
+            <Button size="sm" onClick={() => setShowAdmitDialog(true)} className="w-full min-h-10 bg-violet-600 text-white hover:bg-violet-700">
               <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un cas anonymisé
             </Button>
             {personalPatients.length === 0 ? (
@@ -387,12 +394,12 @@ export default function MonStage() {
               <div className="space-y-2">
                 {personalPatients.map(p => (
                   <div key={p.id} onClick={() => navigate(`/mon-stage/patient/${p.id}`)}
-                    className="bg-white rounded-xl p-4 border border-border/50 cursor-pointer hover:border-[var(--pulseboard-green)]/30 transition-all flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-[var(--pulseboard-green-light)] flex items-center justify-center text-[var(--pulseboard-green)] text-xs font-bold shrink-0">
+                    className="bg-white rounded-xl p-4 border border-border/50 cursor-pointer hover:border-violet-300 transition-all flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 text-xs font-bold shrink-0">
                       {p.firstName[0]}{p.lastName[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{p.firstName} {p.lastName}</p>
+                      <p className="font-medium text-sm flex items-center gap-1.5">{p.firstName} {p.lastName}<Lock className="w-3 h-3 text-violet-500" /></p>
                       <p className="text-xs text-muted-foreground truncate">{p.diagnosis || "Diagnostic en cours"} {p.serviceName ? `· ${p.serviceName}` : ""}</p>
                     </div>
                     <span className={`text-xs font-semibold ${p.status === "critique" ? "text-[var(--pulseboard-red)]" : p.status === "modere" ? "text-[var(--pulseboard-amber)]" : "text-[var(--pulseboard-green)]"}`}>

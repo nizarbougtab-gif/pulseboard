@@ -231,7 +231,7 @@ export default function PatientView() {
             </button>
           </div>
         </nav>
-        <div className="px-4 py-3 text-[10px] text-muted-foreground border-t border-border/50">MEDBOARD &copy; 2026</div>
+        <div className="px-4 py-3 text-[10px] text-muted-foreground border-t border-border/50">PULSEBOARD &copy; 2026</div>
       </aside>
 
       {/* Main content */}
@@ -380,7 +380,7 @@ export default function PatientView() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b px-6 flex items-center gap-4 shrink-0">
+      <div className="bg-white border-b px-3 sm:px-6 flex items-center gap-2 sm:gap-4 shrink-0 overflow-x-auto overscroll-x-contain">
         {[
           { key: "suivi" as PatientTab, label: "Suivi", icon: FileText },
           { key: "taches" as PatientTab, label: "Tâches", icon: ListChecks },
@@ -390,7 +390,7 @@ export default function PatientView() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 py-3 px-1 text-sm border-b-2 transition-all duration-200 ${
+            className={`flex shrink-0 items-center gap-2 py-3 px-2 sm:px-1 text-sm border-b-2 transition-all duration-200 ${
               activeTab === tab.key
                 ? "border-[var(--pulseboard-green)] text-[var(--pulseboard-green)] font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -403,7 +403,7 @@ export default function PatientView() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6">
         {/* SUIVI TAB */}
         {activeTab === "suivi" && (
           <div className="max-w-2xl mx-auto">

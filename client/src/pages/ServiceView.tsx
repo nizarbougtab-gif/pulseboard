@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import {
   Bed, Search, Plus, AlertCircle, Clock, ClipboardList,
   Users, CheckCircle, Activity, ArrowLeft,
-  Stethoscope, ChevronRight, LayoutGrid, BookOpen, User, Copy, Check, UserCheck, X
+  Stethoscope, ChevronRight, LayoutGrid, BookOpen, User, Copy, Check, UserCheck, X, Bell, Moon
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import AdmitPatientDialog from "@/components/AdmitPatientDialog";
@@ -25,6 +25,7 @@ import RelevePanel from "@/components/RelevePanel";
 
 type TabType = "lits" | "garde" | "messages" | "consult" | "releve";
 type FilterType = "tous" | "urgents" | "sortie_prevue" | "sortis";
+type MessageSection = "equipe" | "decisions" | "alertes";
 
 export default function ServiceView() {
   const { id } = useParams<{ id: string }>();
@@ -48,6 +49,7 @@ export default function ServiceView() {
   const [showGuardDialog, setShowGuardDialog] = useState(false);
   const [guardForm, setGuardForm] = useState({ startsAt: "", endsAt: "", supervisorId: "" });
   const [guardAssignment, setGuardAssignment] = useState({ guardId: "", patientId: "", assignedToId: "", notes: "" });
+  const [messageSection, setMessageSection] = useState<MessageSection>("equipe");
 
   const { data: service, isLoading: serviceLoading } = trpc.services.get.useQuery({ id: serviceId }, { enabled: serviceId > 0 });
   const { data: patients = [], isLoading: patientsLoading } = trpc.patients.list.useQuery({ serviceId, filter }, { enabled: serviceId > 0 });
@@ -55,6 +57,10 @@ export default function ServiceView() {
   const { data: consultations = [] } = trpc.consultations.list.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const { data: decisionProposals = [] } = trpc.decisionProposals.list.useQuery(
     { serviceId, pendingOnly: true },
+    { enabled: serviceId > 0 }
+  );
+  const { data: allDecisionProposals = [] } = trpc.decisionProposals.list.useQuery(
+    { serviceId, pendingOnly: false },
     { enabled: serviceId > 0 }
   );
   const { data: hospitals = [] } = trpc.hospitals.list.useQuery();
@@ -110,6 +116,7 @@ export default function ServiceView() {
   const reviewDecision = trpc.decisionProposals.review.useMutation({
     onSuccess: (_, variables) => {
       utils.decisionProposals.list.invalidate({ serviceId, pendingOnly: true });
+      utils.decisionProposals.list.invalidate({ serviceId, pendingOnly: false });
       utils.patients.list.invalidate({ serviceId });
       utils.consultations.list.invalidate({ serviceId });
       toast.success(variables.approved ? "Décision validée" : "Proposition refusée");
@@ -146,10 +153,13 @@ export default function ServiceView() {
 
   const stats = useMemo(() => {
     const critiques = patients.filter(p => p.status === "critique").length;
-    const moderes = patients.filter(p => p.status === "modere").length;
-    const stables = patients.filter(p => p.status === "stable").length;
-    return { critiques, moderes, stables, total: patients.length };
-  }, [patients]);
+    const occupied = patients.filter(p => !p.actualDischarge && p.bedNumber).length;
+    const withoutBed = patients.filter(p => !p.actualDischarge && !p.bedNumber).length;
+    const pendingConsultations = consultations.filter(c => c.status === "en_attente").length;
+    return { critiques, occupied, withoutBed, pendingConsultations };
+  }, [patients, consultations]);
+
+  const activeGuard = useMemo(() => guards.find(guard => guard.status === "active"), [guards]);
 
   const getDaysSince = (date: Date | string) => {
     const d = new Date(date);
@@ -373,9 +383,18 @@ export default function ServiceView() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto bg-[#f7f8f6]">
         {activeTab === "lits" && (
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <div className="bg-white rounded-xl p-3 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg bg-[var(--pulseboard-green-light)] flex items-center justify-center">
+                    <Bed className="w-3.5 h-3.5 text-[var(--pulseboard-green)]" />
+                  </div>
+                </div>
+                <div className="text-xl font-bold text-[var(--pulseboard-green)]">{stats.occupied}<span className="text-xs font-normal text-muted-foreground">/{service?.totalBeds || "—"}</span></div>
+                <div className="text-[11px] text-muted-foreground">Lits occupés</div>
+              </div>
               <div className="bg-white rounded-xl p-3 border border-border/50">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded-lg bg-[var(--pulseboard-red-light)] flex items-center justify-center">
@@ -388,20 +407,11 @@ export default function ServiceView() {
               <div className="bg-white rounded-xl p-3 border border-border/50">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-7 h-7 rounded-lg bg-[var(--pulseboard-amber-light)] flex items-center justify-center">
-                    <Activity className="w-3.5 h-3.5 text-[var(--pulseboard-amber)]" />
+                    <UserCheck className="w-3.5 h-3.5 text-[var(--pulseboard-amber)]" />
                   </div>
                 </div>
-                <div className="text-xl font-bold text-[var(--pulseboard-amber)]">{stats.moderes}</div>
-                <div className="text-[11px] text-muted-foreground">Modérés</div>
-              </div>
-              <div className="bg-white rounded-xl p-3 border border-border/50">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-7 h-7 rounded-lg bg-[var(--pulseboard-green-light)] flex items-center justify-center">
-                    <CheckCircle className="w-3.5 h-3.5 text-[var(--pulseboard-green)]" />
-                  </div>
-                </div>
-                <div className="text-xl font-bold text-[var(--pulseboard-green)]">{stats.stables}</div>
-                <div className="text-[11px] text-muted-foreground">Stables</div>
+                <div className="text-xl font-bold text-[var(--pulseboard-amber)]">{stats.withoutBed}</div>
+                <div className="text-[11px] text-muted-foreground">Sans lit</div>
               </div>
               <div className="bg-white rounded-xl p-3 border border-border/50">
                 <div className="flex items-center gap-2 mb-1">
@@ -409,20 +419,20 @@ export default function ServiceView() {
                     <Users className="w-3.5 h-3.5 text-[var(--pulseboard-blue)]" />
                   </div>
                 </div>
-                <div className="text-xl font-bold">{stats.total}</div>
-                <div className="text-[11px] text-muted-foreground">Total</div>
+                <div className="text-xl font-bold text-[var(--pulseboard-blue)]">{stats.pendingConsultations}</div>
+                <div className="text-[11px] text-muted-foreground">Consult. en attente</div>
               </div>
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 overscroll-x-contain">
               {(["tous", "urgents", "sortie_prevue", "sortis"] as FilterType[]).map(f => {
                 const labels: Record<FilterType, string> = { tous: "Tous", urgents: "Urgents", sortie_prevue: "Sortie prévue", sortis: "Sortis" };
                 return (
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                    className={`min-h-9 shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                       filter === f
                         ? "bg-[var(--pulseboard-green)] text-white"
                         : "bg-white text-muted-foreground hover:bg-gray-100 border border-border/50"
@@ -452,18 +462,18 @@ export default function ServiceView() {
                     <div
                       key={patient.id}
                       onClick={() => navigate(`/patient/${patient.id}`)}
-                      className="bg-white rounded-xl p-4 border border-border/50 hover:border-[var(--pulseboard-green)]/30 hover:shadow-sm transition-all duration-200 cursor-pointer flex items-center gap-4"
+                      className="bg-white rounded-xl p-3 sm:p-4 border border-border/50 hover:border-[var(--pulseboard-green)]/30 hover:shadow-sm transition-all duration-200 cursor-pointer flex items-center gap-3 sm:gap-4 min-h-[76px]"
                     >
-                      <div className="w-12 text-center">
+                      <div className="w-10 sm:w-12 shrink-0 text-center rounded-lg bg-gray-50 py-1.5">
                         <div className="text-[11px] text-muted-foreground">Lit</div>
                         <div className="font-bold text-sm">{patient.bedNumber || "—"}</div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm">{patient.firstName} {patient.lastName}</span>
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="font-medium text-sm truncate">{patient.firstName} {patient.lastName}</span>
                           <span className={`day-badge ${getDayClass(days)}`}>J+{days}</span>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
+                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                           {patient.diagnosis || "Diagnostic en cours"}
                           {patient.expectedDischarge && <span className="ml-2 text-[var(--pulseboard-amber)]">· Sortie prévue</span>}
                           {patient.actualDischarge && (
@@ -472,18 +482,19 @@ export default function ServiceView() {
                             </span>
                           )}
                         </div>
+                        <div className="text-[10px] text-muted-foreground mt-1">Mis à jour {new Date(patient.updatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-3 shrink-0">
                         {patient.allergies && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--pulseboard-red-light)] text-[var(--pulseboard-red)] font-medium flex items-center gap-1">
+                          <span title={`Allergie : ${patient.allergies}`} className="text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-[var(--pulseboard-red-light)] text-[var(--pulseboard-red)] font-medium flex items-center gap-1">
                             <AlertCircle className="w-3 h-3" />
-                            {patient.allergies.split(",")[0]}
+                            <span className="hidden sm:inline">{patient.allergies.split(",")[0]}</span>
                           </span>
                         )}
                         <span className={`urg-tag ${patient.status}`}>
                           {patient.status === "critique" ? "Critique" : patient.status === "modere" ? "Modéré" : "Stable"}
                         </span>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                        <ChevronRight className="hidden sm:block w-4 h-4 text-muted-foreground" />
                       </div>
                     </div>
                   );
@@ -494,11 +505,22 @@ export default function ServiceView() {
         )}
 
         {activeTab === "garde" && (
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between"><div><h2 className="font-semibold">Organisation des gardes</h2><p className="text-xs text-muted-foreground">Horaires, superviseur, équipe et patients attribués.</p></div>{can("guard.manage") && hasConfirmedRole && <Button size="sm" className="bg-[var(--pulseboard-green)] text-white" onClick={() => setShowGuardDialog(true)}><Plus className="w-4 h-4 mr-1" /> Planifier</Button>}</div>
+          <div className="p-3 sm:p-6 space-y-4">
+            {activeGuard && (
+              <div className="rounded-2xl bg-slate-900 text-white p-4 sm:p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"><Moon className="w-5 h-5 text-emerald-300" /></div>
+                    <div><div className="flex items-center gap-2"><h2 className="font-semibold">Garde en cours</h2><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /></div><p className="text-xs text-slate-300 mt-0.5">Depuis {new Date(activeGuard.startsAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · {activeGuard.members.length} membre{activeGuard.members.length > 1 ? "s" : ""} · {activeGuard.assignments.length} patient{activeGuard.assignments.length > 1 ? "s" : ""} attribué{activeGuard.assignments.length > 1 ? "s" : ""}</p></div>
+                  </div>
+                  <Badge className="w-fit bg-emerald-400/15 text-emerald-200 border border-emerald-300/20">Mode garde actif</Badge>
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h2 className="font-semibold">Organisation des gardes</h2><p className="text-xs text-muted-foreground">Horaires, superviseur, équipe et patients attribués.</p></div>{can("guard.manage") && hasConfirmedRole && <Button size="sm" className="w-full sm:w-auto min-h-10 bg-[var(--pulseboard-green)] text-white" onClick={() => setShowGuardDialog(true)}><Plus className="w-4 h-4 mr-1" /> Planifier</Button>}</div>
             {guards.length === 0 ? <div className="bg-white border border-dashed rounded-xl py-12 text-center text-muted-foreground"><Clock className="w-10 h-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Aucune garde planifiée</p></div> : guards.map(guard => (
               <div key={guard.id} className={`bg-white rounded-xl border p-4 ${guard.status === "active" ? "border-[var(--pulseboard-green)]" : "border-border/50"}`}>
-                <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="font-semibold text-sm">Garde du {new Date(guard.startsAt).toLocaleDateString("fr-FR")}</h3><Badge className={guard.status === "active" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : guard.status === "ended" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-800"}>{guard.status === "active" ? "En cours" : guard.status === "ended" ? "Terminée" : "Planifiée"}</Badge></div><p className="text-xs text-muted-foreground mt-1">{new Date(guard.startsAt).toLocaleString("fr-FR")} → {new Date(guard.endsAt).toLocaleString("fr-FR")}</p></div>{can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="flex gap-2">{guard.status === "scheduled" && <Button size="sm" className="bg-[var(--pulseboard-green)] text-white" onClick={() => setGuardStatus.mutate({ id: guard.id, status: "active" })}>Commencer la garde</Button>}{guard.status === "active" && <Button size="sm" variant="outline" onClick={() => { const summary = prompt("Résumé obligatoire de fin de garde :"); if (summary?.trim()) setGuardStatus.mutate({ id: guard.id, status: "ended", summary }); }}>Terminer la garde</Button>}</div>}</div>
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="flex items-center gap-2 flex-wrap"><h3 className="font-semibold text-sm">Garde du {new Date(guard.startsAt).toLocaleDateString("fr-FR")}</h3><Badge className={guard.status === "active" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : guard.status === "ended" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-800"}>{guard.status === "active" ? "En cours" : guard.status === "ended" ? "Terminée" : "Planifiée"}</Badge></div><p className="text-xs text-muted-foreground mt-1">{new Date(guard.startsAt).toLocaleString("fr-FR")} → {new Date(guard.endsAt).toLocaleString("fr-FR")}</p></div>{can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="flex gap-2">{guard.status === "scheduled" && <Button size="sm" className="min-h-10 bg-[var(--pulseboard-green)] text-white" onClick={() => setGuardStatus.mutate({ id: guard.id, status: "active" })}>Commencer la garde</Button>}{guard.status === "active" && <Button size="sm" className="min-h-10" variant="outline" onClick={() => { const summary = prompt("Résumé obligatoire de fin de garde :"); if (summary?.trim()) setGuardStatus.mutate({ id: guard.id, status: "ended", summary }); }}>Terminer la garde</Button>}</div>}</div>
                 <div className="mt-3"><p className="text-xs font-semibold mb-1">Équipe</p><div className="flex flex-wrap gap-1">{guard.members.map((m:any) => <Badge key={m.id} variant="outline">{m.userName || `Membre #${m.userId}`} · {m.dutyRole === "student" ? "Étudiant" : m.dutyRole === "supervisor" ? "Superviseur" : "Clinicien"}</Badge>)}</div></div>
                 <div className="mt-3"><p className="text-xs font-semibold mb-1">Patients attribués</p>{guard.assignments.length ? guard.assignments.map((a:any) => <div key={a.id} className="text-xs bg-gray-50 rounded-lg p-2 mb-1">Lit {a.bedNumber || "—"} · {a.patientFirstName} {a.patientLastName} → membre #{a.assignedToId}{a.notes ? ` · ${a.notes}` : ""}</div>) : <p className="text-xs text-muted-foreground">Aucun patient attribué.</p>}</div>
                 {can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mt-3"><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.patientId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), patientId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Patient" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir patient</SelectItem>{patients.filter(p=>!p.actualDischarge).map(p=><SelectItem key={p.id} value={String(p.id)}>Lit {p.bedNumber || "—"} · {p.firstName} {p.lastName}</SelectItem>)}</SelectContent></Select><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.assignedToId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), assignedToId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Membre" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir membre</SelectItem>{guard.members.map((m:any)=><SelectItem key={m.userId} value={String(m.userId)}>{m.userName || `Membre #${m.userId}`}</SelectItem>)}</SelectContent></Select><Input placeholder="Consigne" value={guardAssignment.guardId === String(guard.id) ? guardAssignment.notes : ""} onChange={e => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), notes: e.target.value }))} /><Button disabled={guardAssignment.guardId !== String(guard.id) || !guardAssignment.patientId || !guardAssignment.assignedToId || assignGuardPatient.isPending} onClick={() => assignGuardPatient.mutate({ guardId: guard.id, patientId: Number(guardAssignment.patientId), assignedToId: Number(guardAssignment.assignedToId), notes: guardAssignment.notes || undefined })}>Attribuer</Button></div>}
@@ -509,8 +531,20 @@ export default function ServiceView() {
         )}
 
         {activeTab === "messages" && (
-          <div className="p-6">
-            {decisionProposals.length > 0 && (
+          <div className="p-3 sm:p-6">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-5">
+              {([
+                { key: "equipe" as MessageSection, label: "Équipe", icon: Users, count: 0 },
+                { key: "decisions" as MessageSection, label: "Décisions", icon: CheckCircle, count: decisionProposals.length },
+                { key: "alertes" as MessageSection, label: "Alertes cliniques", icon: Bell, count: alerts.length },
+              ]).map(item => (
+                <button key={item.key} onClick={() => setMessageSection(item.key)} className={`min-h-10 shrink-0 rounded-lg border px-3 flex items-center gap-2 text-xs font-medium transition-colors ${messageSection === item.key ? "bg-[var(--pulseboard-green)] border-[var(--pulseboard-green)] text-white" : "bg-white border-border/60 text-muted-foreground hover:text-foreground"}`}>
+                  <item.icon className="w-3.5 h-3.5" /> {item.label}
+                  {item.count > 0 && <span className={`min-w-5 h-5 px-1 rounded-full flex items-center justify-center text-[10px] ${messageSection === item.key ? "bg-white/20" : item.key === "alertes" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"}`}>{item.count}</span>}
+                </button>
+              ))}
+            </div>
+            {messageSection === "decisions" && decisionProposals.length > 0 && (
               <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
@@ -551,7 +585,56 @@ export default function ServiceView() {
                 </div>
               </div>
             )}
-            <ServiceChat serviceId={serviceId} isOpen={true} onClose={() => setActiveTab("lits")} inline />
+            {messageSection === "decisions" && decisionProposals.length === 0 && (
+              <div className="rounded-xl border border-dashed bg-white py-12 text-center text-muted-foreground"><CheckCircle className="w-9 h-9 mx-auto mb-2 opacity-35" /><p className="text-sm">Aucune décision à valider</p></div>
+            )}
+            {messageSection === "decisions" && allDecisionProposals.some(proposal => proposal.status !== "pending") && (
+              <div className="mt-5 rounded-xl border border-border/60 bg-white p-4">
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold">Journal des décisions</h2>
+                  <p className="text-xs text-muted-foreground">Les validations et refus restent conservés avec leur auteur, leur motif et leur date.</p>
+                </div>
+                <div className="space-y-2">
+                  {allDecisionProposals.filter(proposal => proposal.status !== "pending").map(proposal => (
+                    <div key={proposal.id} className="rounded-lg border border-border/60 bg-gray-50/70 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            {proposal.decisionType === "sortie" ? "Sortie" : proposal.decisionType === "refere" ? "Référence" : "Hospitalisation"}
+                            {` · ${proposal.subjectName}${proposal.subjectBedNumber ? ` · lit ${proposal.subjectBedNumber}` : ""}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">Proposé par {proposal.proposerName || `membre #${proposal.proposedById}`} · {new Date(proposal.createdAt).toLocaleString("fr-FR")}</p>
+                          {proposal.reason && <p className="text-xs text-muted-foreground mt-1">Motif : {proposal.reason}</p>}
+                          {proposal.reviewNote && <p className="text-xs text-muted-foreground mt-1">Note du validateur : {proposal.reviewNote}</p>}
+                          {proposal.reviewedAt && <p className="text-[11px] text-muted-foreground mt-1">Traité le {new Date(proposal.reviewedAt).toLocaleString("fr-FR")}{proposal.reviewedById ? ` · membre #${proposal.reviewedById}` : ""}</p>}
+                        </div>
+                        <Badge className={proposal.status === "approved" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : "bg-red-100 text-red-700"}>
+                          {proposal.status === "approved" ? "Validée" : "Refusée"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {messageSection === "alertes" && (
+              <div className="space-y-2">
+                {alerts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed bg-white py-12 text-center text-muted-foreground"><Bell className="w-9 h-9 mx-auto mb-2 opacity-35" /><p className="text-sm">Aucune alerte clinique active</p></div>
+                ) : alerts.map(alert => {
+                  const isCritical = alert.type === "critical_patient";
+                  const typeLabel = isCritical ? "Patient critique" : alert.type === "no_bed" ? "Lit non assigné" : alert.type === "dps_missing" ? "Dossier incomplet" : "Tâche en retard";
+                  return (
+                    <div key={alert.id} className={`rounded-xl border bg-white p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${isCritical ? "border-red-200" : "border-amber-200"}`}>
+                      <div className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center ${isCritical ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"}`}><AlertCircle className="w-4 h-4" /></div>
+                      <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><p className="text-sm font-semibold">{typeLabel}</p><Badge className={isCritical ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"}>{isCritical ? "Critique" : "À surveiller"}</Badge></div><p className="text-xs text-muted-foreground mt-1">{alert.message}</p></div>
+                      <div className="flex gap-2">{alert.patientId && <Button size="sm" variant="outline" onClick={() => navigate(`/patient/${alert.patientId}`)}>Voir le patient</Button>}{can("alert.resolve") && <Button size="sm" onClick={() => resolveAlert.mutate({ id: alert.id })}>Traiter</Button>}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {messageSection === "equipe" && <ServiceChat serviceId={serviceId} isOpen={true} onClose={() => setActiveTab("lits")} inline />}
           </div>
         )}
 
@@ -854,7 +937,11 @@ export default function ServiceView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <BottomNav serviceId={serviceId} />
+      <BottomNav
+        serviceId={serviceId}
+        activeServiceTab={activeTab === "lits" || activeTab === "garde" || activeTab === "messages" ? activeTab : undefined}
+        onServiceTabChange={tab => setActiveTab(tab)}
+      />
     </div>
     </div>
   );

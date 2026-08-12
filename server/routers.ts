@@ -394,7 +394,15 @@ export const appRouter = router({
       await requireServiceMember(task.serviceId, ctx.user.id);
       const data: any = { status: input.status };
       if (input.status === "completed") data.completedAt = new Date().toISOString();
+      if (input.status !== "completed") data.completedAt = null;
       await db.updateTask(input.id, data);
+      await db.logActivity({
+        serviceId: task.serviceId,
+        patientId: task.patientId,
+        userId: ctx.user.id,
+        action: input.status === "completed" ? "task_completed" : input.status === "in_progress" ? "task_started" : "task_reopened",
+        details: `Tâche « ${task.title} » ${input.status === "completed" ? "validée" : input.status === "in_progress" ? "commencée" : "rouverte"}`,
+      });
       return { success: true };
     }),
   }),
