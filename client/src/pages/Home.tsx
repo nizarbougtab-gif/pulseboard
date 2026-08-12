@@ -257,6 +257,9 @@ export default function Home() {
                 Installable sur téléphone
               </span>
             </div>
+            <div className="mt-5 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full border border-[var(--pulseboard-green)]/20 bg-[var(--pulseboard-green-light)] px-4 py-2 text-xs text-[var(--pulseboard-green-dark)]">
+              <Shield className="w-3.5 h-3.5" /> Accès selon le rôle <span className="text-[var(--pulseboard-green)]/40">·</span> Actions cliniques tracées <span className="text-[var(--pulseboard-green)]/40">·</span> Données patients accessibles en ligne uniquement
+            </div>
           </div>
         </div>
       </section>
