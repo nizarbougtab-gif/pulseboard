@@ -1,9 +1,9 @@
-import { eq, asc, desc, count, and } from "drizzle-orm";
+import { eq, asc, desc, count, and, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
 
@@ -58,6 +58,121 @@ export async function getUserById(id: number) {
   const db = getDb();
   const [user] = await db.select().from(users).where(eq(users.id, id));
   return user ?? null;
+}
+
+export async function ensureConfiguredAdmins(emails: string[]) {
+  const normalized = emails.map(email => email.trim().toLowerCase()).filter(Boolean);
+  if (normalized.length === 0) return;
+  const db = getDb();
+  await db.update(users).set({ role: "admin", updatedAt: new Date() }).where(inArray(users.email, normalized));
+}
+
+export async function createDefaultSubscription(userId: number) {
+  const db = getDb();
+  await db.insert(subscriptions).values({ userId }).onConflictDoNothing({ target: subscriptions.userId });
+}
+
+export async function getSubscription(userId: number) {
+  const db = getDb();
+  const [subscription] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId));
+  const active = Boolean(
+    subscription?.status === "active" &&
+    (!subscription.currentPeriodEnd || subscription.currentPeriodEnd.getTime() > Date.now()),
+  );
+  return {
+    plan: active ? subscription!.plan : "free" as const,
+    status: subscription?.status ?? "inactive",
+    billingCycle: subscription?.billingCycle ?? "monthly",
+    currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+  };
+}
+
+export async function getFreePlanUsage(userId: number) {
+  const db = getDb();
+  const [caseCount] = await db.select({ count: count() }).from(personalPatients).where(eq(personalPatients.userId, userId));
+  const [rotationCount] = await db.select({ count: count() }).from(rotations).where(eq(rotations.userId, userId));
+  const serviceRows = await db.select({ serviceName: personalPatients.serviceName }).from(personalPatients).where(eq(personalPatients.userId, userId));
+  const serviceNames = [...new Set(serviceRows.map(row => row.serviceName?.trim().toLocaleLowerCase("fr-FR")).filter(Boolean))] as string[];
+  return { cases: caseCount?.count ?? 0, rotations: rotationCount?.count ?? 0, serviceNames };
+}
+
+export async function createPaymentRequest(userId: number, plan: "carnet_pro" | "hall_carnet", billingCycle: "monthly" | "annual", reference: string) {
+  const monthly = plan === "carnet_pro" ? 3000 : 5000;
+  const amountFcfa = billingCycle === "annual" ? monthly * 10 : monthly;
+  const db = getDb();
+  const [{ id }] = await db.insert(payments).values({ userId, plan, billingCycle, reference, amountFcfa }).returning({ id: payments.id });
+  return { id, reference, amountFcfa, provider: "wave" as const, status: "pending" as const };
+}
+
+export async function getPendingPayments() {
+  const db = getDb();
+  return db.select({ id: payments.id, reference: payments.reference, plan: payments.plan, billingCycle: payments.billingCycle, amountFcfa: payments.amountFcfa, status: payments.status, createdAt: payments.createdAt, userId: payments.userId, userName: users.name, userEmail: users.email })
+    .from(payments).leftJoin(users, eq(payments.userId, users.id)).where(eq(payments.status, "pending")).orderBy(desc(payments.createdAt));
+}
+
+export async function confirmPayment(paymentId: number, providerTransactionId: string) {
+  const db = getDb();
+  return db.transaction(async tx => {
+    const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId));
+    if (!payment) throw new Error("Paiement introuvable");
+    if (payment.status !== "pending") throw new Error("Ce paiement a déjà été traité");
+    const periodEnd = new Date();
+    periodEnd.setMonth(periodEnd.getMonth() + (payment.billingCycle === "annual" ? 12 : 1));
+    await tx.update(payments).set({ status: "paid", providerTransactionId, paidAt: new Date() }).where(eq(payments.id, paymentId));
+    await tx.insert(subscriptions).values({ userId: payment.userId, plan: payment.plan, status: "active", billingCycle: payment.billingCycle, provider: payment.provider, providerSubscriptionId: providerTransactionId, currentPeriodEnd: periodEnd })
+      .onConflictDoUpdate({ target: subscriptions.userId, set: { plan: payment.plan, status: "active", billingCycle: payment.billingCycle, provider: payment.provider, providerSubscriptionId: providerTransactionId, currentPeriodEnd: periodEnd, updatedAt: new Date() } });
+    return { success: true, userId: payment.userId, plan: payment.plan, currentPeriodEnd: periodEnd };
+  });
+}
+
+export async function createAccountToken(userId: number, kind: "password_reset" | "email_verification", tokenHash: string, expiresAt: Date) {
+  const db = getDb();
+  await db.insert(accountTokens).values({ userId, kind, tokenHash, expiresAt });
+}
+
+export async function consumeAccountToken(tokenHash: string, kind: "password_reset" | "email_verification") {
+  const db = getDb();
+  const [token] = await db.select().from(accountTokens).where(and(eq(accountTokens.tokenHash, tokenHash), eq(accountTokens.kind, kind), isNull(accountTokens.usedAt)));
+  if (!token || token.expiresAt.getTime() <= Date.now()) return null;
+  await db.update(accountTokens).set({ usedAt: new Date() }).where(eq(accountTokens.id, token.id));
+  return token;
+}
+
+export async function updatePassword(userId: number, passwordHash: string) {
+  const db = getDb();
+  await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+export async function verifyUserEmail(userId: number) {
+  const db = getDb();
+  await db.update(users).set({ emailVerified: true, emailVerifiedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+export async function requestAccountDeletion(userId: number) {
+  const db = getDb();
+  await db.update(users).set({ deletionRequestedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+export async function logSecurityEvent(userId: number | null, eventType: string, details?: string) {
+  const db = getDb();
+  await db.insert(securityEvents).values({ userId: userId ?? undefined, eventType, details });
+}
+
+export async function getPersonalDataExport(userId: number) {
+  const db = getDb();
+  const [profile] = await db.select({ id: users.id, name: users.name, email: users.email, medicalRole: users.medicalRole, hospitalId: users.hospitalId, createdAt: users.createdAt }).from(users).where(eq(users.id, userId));
+  const [plan, userRotations, userCompetences, userProcedures, cases, notes, tasks, vitals, observations] = await Promise.all([
+    getSubscription(userId),
+    db.select().from(rotations).where(eq(rotations.userId, userId)),
+    db.select().from(competences).where(eq(competences.userId, userId)),
+    db.select().from(procedures).where(eq(procedures.userId, userId)),
+    db.select().from(personalPatients).where(eq(personalPatients.userId, userId)),
+    db.select().from(personalNotes).where(eq(personalNotes.userId, userId)),
+    db.select().from(personalTasks).where(eq(personalTasks.userId, userId)),
+    db.select().from(personalVitals).where(eq(personalVitals.userId, userId)),
+    db.select().from(personalObservations).where(eq(personalObservations.userId, userId)),
+  ]);
+  return { exportedAt: new Date().toISOString(), profile, subscription: plan, carnet: { rotations: userRotations, competences: userCompetences, procedures: userProcedures, cases: cases.map(anonymizePersonalPatient), notes, tasks, vitals, observations } };
 }
 
 // ===== HOSPITALS =====

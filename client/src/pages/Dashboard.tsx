@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import CreateServiceDialog from "@/components/CreateServiceDialog";
 import BottomNav from "@/components/BottomNav";
+import PulseBoardBrand from "@/components/PulseBoardBrand";
 
 export default function Dashboard() {
   const { user, medicalRole, isAuthenticated, loading, logout, can } = useAuth({
@@ -64,12 +65,7 @@ export default function Dashboard() {
       <aside className="medboard-sidebar">
         {/* Logo */}
         <div className="p-5 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[var(--pulseboard-green)] flex items-center justify-center">
-              <Plus className="w-4 h-4 text-white rotate-45" />
-            </div>
-            <span className="font-bold text-base tracking-tight">PulseBoard</span>
-          </div>
+          <PulseBoardBrand />
         </div>
 
         {/* Menu */}

@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity } from "lucide-react";
+import PulseBoardBrand from "@/components/PulseBoardBrand";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function Login() {
   const [, navigate] = useLocation();
@@ -22,6 +23,7 @@ export default function Login() {
   const [regPassword, setRegPassword] = useState("");
   const [regRole, setRegRole] = useState<"externe" | "interne" | "resident" | "medecin">("interne");
   const [regError, setRegError] = useState("");
+  const [accepted, setAccepted] = useState(false);
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
@@ -42,12 +44,8 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-[var(--pulseboard-green)] flex items-center justify-center">
-            <Activity className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-xl tracking-tight">PulseBoard</span>
-          <span className="text-xs text-muted-foreground font-medium px-2 py-0.5 bg-muted rounded-full">Sénégal</span>
+        <div className="mb-8 flex items-center justify-center">
+          <PulseBoardBrand />
         </div>
 
         <Tabs defaultValue="login" className="w-full">
@@ -82,6 +80,9 @@ export default function Login() {
                       required
                     />
                   </div>
+                  <button type="button" onClick={() => navigate("/forgot-password")} className="text-sm text-[var(--pulseboard-green)] hover:underline">
+                    Mot de passe oublié ?
+                  </button>
                   <div className="space-y-2">
                     <Label htmlFor="password">Mot de passe</Label>
                     <Input
@@ -116,7 +117,8 @@ export default function Login() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     setRegError("");
-                    registerMutation.mutate({ name: regName, email: regEmail, password: regPassword, medicalRole: regRole });
+                    if (!accepted) return setRegError("Vous devez accepter les conditions et la politique de confidentialité.");
+                    registerMutation.mutate({ name: regName, email: regEmail, password: regPassword, medicalRole: regRole, acceptTerms: true, acceptPrivacy: true });
                   }}
                   className="space-y-4"
                 >
@@ -129,6 +131,12 @@ export default function Login() {
                       onChange={(e) => setRegName(e.target.value)}
                       required
                     />
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox id="legal-consent" checked={accepted} onCheckedChange={value => setAccepted(value === true)} />
+                    <Label htmlFor="legal-consent" className="text-xs leading-5 font-normal">
+                      J'accepte les <a href="/terms" target="_blank" className="underline">conditions d'utilisation</a> et la <a href="/privacy" target="_blank" className="underline">politique de confidentialité</a>.
+                    </Label>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="reg-email">Email</Label>

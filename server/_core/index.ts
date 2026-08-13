@@ -8,7 +8,8 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { seedHospitalsIfEmpty, runMigrations } from "../db";
+import { seedHospitalsIfEmpty, runMigrations, ensureConfiguredAdmins } from "../db";
+import { ENV } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -38,9 +39,14 @@ async function startServer() {
   }
 
   // Migrations automatiques au démarrage
+  if (process.env.NODE_ENV === "production" && process.env.BILLING_ENFORCED === "true") {
+    if (!process.env.WAVE_PAYMENT_LINK) throw new Error("WAVE_PAYMENT_LINK est requis lorsque BILLING_ENFORCED=true");
+    if (ENV.adminEmails.length === 0) throw new Error("PULSEBOARD_ADMIN_EMAILS est requis lorsque BILLING_ENFORCED=true");
+  }
   await runMigrations();
   // Seed hôpitaux sénégalais si la table est vide
   await seedHospitalsIfEmpty();
+  await ensureConfiguredAdmins(ENV.adminEmails);
 
   const app = express();
   const server = createServer(app);
@@ -62,7 +68,7 @@ async function startServer() {
   });
 
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-  app.use("/api/trpc/auth.login", (req, res, next) => {
+  app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword"], (req, res, next) => {
     const now = Date.now();
     const key = req.ip || req.socket.remoteAddress || "unknown";
     const current = loginAttempts.get(key);
