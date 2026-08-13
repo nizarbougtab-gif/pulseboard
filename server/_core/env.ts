@@ -7,4 +7,10 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  publicAppUrl: process.env.PUBLIC_APP_URL ?? "",
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  emailFrom: process.env.EMAIL_FROM ?? "PulseBoard <onboarding@resend.dev>",
+  wavePaymentLink: process.env.WAVE_PAYMENT_LINK ?? "",
+  billingEnforced: process.env.BILLING_ENFORCED === "true",
+  adminEmails: (process.env.PULSEBOARD_ADMIN_EMAILS ?? "").split(",").map(value => value.trim().toLowerCase()).filter(Boolean),
 };

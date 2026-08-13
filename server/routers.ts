@@ -10,6 +10,7 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { canAutoJoinService, canDo, type Permission } from "../shared/permissions";
+import { createHash } from "node:crypto";
 
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const FORBIDDEN_MESSAGE = "Vous n'avez pas accès à cette ressource";
@@ -66,6 +67,52 @@ async function requirePersonalPatient(personalPatientId: number, userId: number)
   return patient;
 }
 
+const hashAccountToken = (token: string) => createHash("sha256").update(token).digest("hex");
+
+function publicAppUrl(req: { protocol: string; get(name: string): string | undefined }) {
+  return (ENV.publicAppUrl || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
+}
+
+async function sendAccountEmail(to: string, subject: string, text: string) {
+  if (!ENV.resendApiKey) {
+    if (!ENV.isProduction) console.info(`[PulseBoard email dev] ${to} — ${subject}\n${text}`);
+    return false;
+  }
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ENV.resendApiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: ENV.emailFrom, to: [to], subject, text }),
+  });
+  if (!response.ok) throw new Error("L'envoi de l'email a échoué");
+  return true;
+}
+
+async function requireCarnetCapacity(userId: number, serviceName?: string) {
+  const subscription = await db.getSubscription(userId);
+  if (subscription.plan !== "free") return;
+  const usage = await db.getFreePlanUsage(userId);
+  if (usage.cases >= 3) throw new TRPCError({ code: "FORBIDDEN", message: "Votre essai gratuit est limité à 3 cas. Passez au Carnet Pro pour continuer." });
+  const normalizedService = serviceName?.trim().toLocaleLowerCase("fr-FR");
+  if (normalizedService && usage.serviceNames.length > 0 && !usage.serviceNames.includes(normalizedService)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "L'essai gratuit couvre un seul service. Passez au Carnet Pro pour en ajouter un autre." });
+  }
+}
+
+async function requireRotationCapacity(userId: number) {
+  const subscription = await db.getSubscription(userId);
+  if (subscription.plan !== "free") return;
+  const usage = await db.getFreePlanUsage(userId);
+  if (usage.rotations >= 1) throw new TRPCError({ code: "FORBIDDEN", message: "L'essai gratuit couvre une seule rotation. Passez au Carnet Pro pour en ajouter une autre." });
+}
+
+async function requireHallPlan(userId: number) {
+  if (!ENV.billingEnforced) return;
+  const subscription = await db.getSubscription(userId);
+  if (subscription.plan !== "hall_carnet") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "L'accès à un espace collectif nécessite l'offre Hall + Carnet." });
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -75,13 +122,22 @@ export const appRouter = router({
       email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
       password: z.string().min(10).max(128),
       medicalRole: z.enum(["externe", "interne", "resident", "medecin"]).default("interne"),
+      acceptTerms: z.literal(true),
+      acceptPrivacy: z.literal(true),
     })).mutation(async ({ ctx, input }) => {
       const existing = await db.getUserByEmail(input.email);
       if (existing) throw new Error("Email déjà utilisé");
       const passwordHash = await bcrypt.hash(input.password, 10);
       const openId = nanoid();
-      await db.upsertUser({ openId, name: input.name, email: input.email, passwordHash, medicalRole: input.medicalRole, loginMethod: "email" });
+      const acceptedAt = new Date();
+      await db.upsertUser({ openId, name: input.name, email: input.email, passwordHash, medicalRole: input.medicalRole, loginMethod: "email", termsAcceptedAt: acceptedAt, privacyAcceptedAt: acceptedAt });
       const user = await db.getUserByOpenId(openId);
+      if (user) {
+        await db.createDefaultSubscription(user.id);
+        const verificationToken = nanoid(48);
+        await db.createAccountToken(user.id, "email_verification", hashAccountToken(verificationToken), new Date(Date.now() + 24 * 60 * 60 * 1000));
+        await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans les 24 heures : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
+      }
       if (!user) throw new Error("Erreur lors de la création du compte");
       const token = await makeSessionToken(openId, input.name);
       ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
@@ -92,9 +148,16 @@ export const appRouter = router({
       password: z.string().min(1).max(128),
     })).mutation(async ({ ctx, input }) => {
       const user = await db.getUserByEmail(input.email);
-      if (!user || !user.passwordHash) throw new Error("Email ou mot de passe incorrect");
+      if (!user || !user.passwordHash) {
+        await db.logSecurityEvent(null, "login_failed", "Compte introuvable");
+        throw new Error("Email ou mot de passe incorrect");
+      }
       const valid = await bcrypt.compare(input.password, user.passwordHash);
-      if (!valid) throw new Error("Email ou mot de passe incorrect");
+      if (!valid) {
+        await db.logSecurityEvent(user.id, "login_failed", "Mot de passe incorrect");
+        throw new Error("Email ou mot de passe incorrect");
+      }
+      await db.logSecurityEvent(user.id, "login_success");
       const token = await makeSessionToken(user.openId, user.name || "");
       ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
       return { success: true, user };
@@ -102,6 +165,56 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
       return { success: true } as const;
+    }),
+    forgotPassword: publicProcedure.input(z.object({ email: z.string().trim().email().max(254).transform(value => value.toLowerCase()) })).mutation(async ({ ctx, input }) => {
+      const user = await db.getUserByEmail(input.email);
+      if (user?.passwordHash) {
+        const rawToken = nanoid(48);
+        await db.createAccountToken(user.id, "password_reset", hashAccountToken(rawToken), new Date(Date.now() + 30 * 60 * 1000));
+        await sendAccountEmail(input.email, "Réinitialisez votre mot de passe PulseBoard", `Ce lien expire dans 30 minutes : ${publicAppUrl(ctx.req)}/reset-password?token=${rawToken}`).catch(error => console.warn("[PulseBoard] Email de récupération non envoyé:", error.message));
+        await db.logSecurityEvent(user.id, "password_reset_requested");
+      }
+      return { success: true, message: "Si ce compte existe, un lien de récupération a été envoyé." };
+    }),
+    resetPassword: publicProcedure.input(z.object({ token: z.string().min(32).max(200), password: z.string().min(10).max(128) })).mutation(async ({ input }) => {
+      const accountToken = await db.consumeAccountToken(hashAccountToken(input.token), "password_reset");
+      if (!accountToken) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce lien est invalide ou a expiré." });
+      await db.updatePassword(accountToken.userId, await bcrypt.hash(input.password, 10));
+      await db.logSecurityEvent(accountToken.userId, "password_reset_completed");
+      return { success: true };
+    }),
+    verifyEmail: publicProcedure.input(z.object({ token: z.string().min(32).max(200) })).mutation(async ({ input }) => {
+      const accountToken = await db.consumeAccountToken(hashAccountToken(input.token), "email_verification");
+      if (!accountToken) throw new TRPCError({ code: "BAD_REQUEST", message: "Ce lien est invalide ou a expiré." });
+      await db.verifyUserEmail(accountToken.userId);
+      await db.logSecurityEvent(accountToken.userId, "email_verified");
+      return { success: true };
+    }),
+  }),
+
+  billing: router({
+    status: protectedProcedure.query(async ({ ctx }) => {
+      const [subscription, usage] = await Promise.all([db.getSubscription(ctx.user.id), db.getFreePlanUsage(ctx.user.id)]);
+      return { ...subscription, usage, limits: subscription.plan === "free" ? { cases: 3, services: 1 } : null };
+    }),
+    requestPayment: protectedProcedure.input(z.object({ plan: z.enum(["carnet_pro", "hall_carnet"]), billingCycle: z.enum(["monthly", "annual"]).default("monthly") })).mutation(async ({ ctx, input }) => {
+      const payment = await db.createPaymentRequest(ctx.user.id, input.plan, input.billingCycle, `PB-${Date.now()}-${nanoid(8).toUpperCase()}`);
+      return { ...payment, paymentLink: ENV.wavePaymentLink || null, message: ENV.wavePaymentLink ? "Ouvrez Wave puis conservez votre référence de paiement." : "Demande enregistrée. Le paiement Wave sera activé dès que le compte marchand sera configuré." };
+    }),
+    pendingPayments: adminProcedure.query(() => db.getPendingPayments()),
+    confirmPayment: adminProcedure.input(z.object({ paymentId: z.number().int().positive(), providerTransactionId: z.string().trim().min(3).max(200) })).mutation(async ({ ctx, input }) => {
+      const result = await db.confirmPayment(input.paymentId, input.providerTransactionId);
+      await db.logSecurityEvent(ctx.user.id, "payment_confirmed", `Paiement ${input.paymentId}, utilisateur ${result.userId}, offre ${result.plan}`);
+      return result;
+    }),
+  }),
+
+  account: router({
+    exportData: protectedProcedure.mutation(async ({ ctx }) => db.getPersonalDataExport(ctx.user.id)),
+    requestDeletion: protectedProcedure.input(z.object({ confirmation: z.literal("SUPPRIMER") })).mutation(async ({ ctx }) => {
+      await db.requestAccountDeletion(ctx.user.id);
+      await db.logSecurityEvent(ctx.user.id, "account_deletion_requested");
+      return { success: true, message: "Votre demande est enregistrée. Le support doit confirmer la suppression après vérification." };
     }),
   }),
 
@@ -168,6 +281,7 @@ export const appRouter = router({
       totalBeds: z.number().optional(),
       description: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
+      await requireHallPlan(ctx.user.id);
       requirePermission(ctx.user.medicalRole, "service.create");
       const { id, code } = await db.createService({ ...input, createdById: ctx.user.id });
       await db.logActivity({ serviceId: id, userId: ctx.user.id, action: "service_created", details: `Service "${input.name}" créé` });
@@ -939,6 +1053,7 @@ export const appRouter = router({
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
+      await requireRotationCapacity(ctx.user.id);
       return db.createRotation({ ...input, userId: ctx.user.id });
     }),
     update: protectedProcedure.input(z.object({
@@ -997,6 +1112,7 @@ export const appRouter = router({
   // Système de codes de service
   membership: router({
     join: protectedProcedure.input(z.object({ code: z.string().min(4) })).mutation(async ({ ctx, input }) => {
+      await requireHallPlan(ctx.user.id);
       const service = await db.getServiceByCode(input.code);
       if (!service) throw new Error("Code invalide");
       const autoJoin = canAutoJoinService(
@@ -1083,6 +1199,7 @@ export const appRouter = router({
       bedNumber: z.number().optional(),
       encounterType: z.enum(["consultation", "hospitalisation"]).default("hospitalisation"),
     })).mutation(async ({ ctx, input }) => {
+      await requireCarnetCapacity(ctx.user.id, input.serviceName);
       return db.createPersonalPatient({ ...input, userId: ctx.user.id });
     }),
     importFromCollective: protectedProcedure.input(z.object({
@@ -1092,6 +1209,7 @@ export const appRouter = router({
       const existingId = await db.personalPatientExistsForSource(ctx.user.id, patient.id);
       if (existingId) return { id: existingId, alreadyExists: true };
       const service = await db.getServiceById(patient.serviceId);
+      await requireCarnetCapacity(ctx.user.id, service?.name);
       const firstInitial = patient.firstName.trim().charAt(0).toUpperCase();
       const lastInitial = patient.lastName.trim().charAt(0).toUpperCase();
       const anonymousCode = `${firstInitial}.${lastInitial}.-${String(patient.id).padStart(3, "0")}`;

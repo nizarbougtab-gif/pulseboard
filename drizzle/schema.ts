@@ -8,6 +8,8 @@ export const users = pgTable("users", {
   openId: text("openId").notNull().unique(),
   name: text("name"),
   email: text("email"),
+  emailVerified: boolean("emailVerified").default(false).notNull(),
+  emailVerifiedAt: timestamp("emailVerifiedAt"),
   passwordHash: text("passwordHash"),
   loginMethod: text("loginMethod"),
   role: text("role").$type<"user" | "admin">().default("user").notNull(),
@@ -16,6 +18,9 @@ export const users = pgTable("users", {
   medicalRoleVerifiedById: integer("medicalRoleVerifiedById"),
   medicalRoleVerifiedAt: timestamp("medicalRoleVerifiedAt"),
   hospitalId: integer("hospitalId"),
+  termsAcceptedAt: timestamp("termsAcceptedAt"),
+  privacyAcceptedAt: timestamp("privacyAcceptedAt"),
+  deletionRequestedAt: timestamp("deletionRequestedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -23,6 +28,52 @@ export const users = pgTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  plan: text("plan").$type<"free" | "carnet_pro" | "hall_carnet">().default("free").notNull(),
+  status: text("subscriptionStatus").$type<"inactive" | "active" | "past_due" | "canceled">().default("inactive").notNull(),
+  billingCycle: text("billingCycle").$type<"monthly" | "annual">().default("monthly").notNull(),
+  provider: text("provider").default("manual").notNull(),
+  providerCustomerId: text("providerCustomerId"),
+  providerSubscriptionId: text("providerSubscriptionId"),
+  currentPeriodEnd: timestamp("currentPeriodEnd"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  reference: text("reference").notNull().unique(),
+  plan: text("plan").$type<"carnet_pro" | "hall_carnet">().notNull(),
+  billingCycle: text("billingCycle").$type<"monthly" | "annual">().default("monthly").notNull(),
+  amountFcfa: integer("amountFcfa").notNull(),
+  provider: text("provider").default("wave").notNull(),
+  status: text("paymentStatus").$type<"pending" | "paid" | "failed" | "refunded">().default("pending").notNull(),
+  providerTransactionId: text("providerTransactionId"),
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const accountTokens = pgTable("account_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  kind: text("tokenKind").$type<"password_reset" | "email_verification">().notNull(),
+  tokenHash: text("tokenHash").notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const securityEvents = pgTable("security_events", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId"),
+  eventType: text("eventType").notNull(),
+  details: text("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 export const hospitals = pgTable("hospitals", {
   id: serial("id").primaryKey(),

@@ -15,10 +15,11 @@ import { getLoginUrl } from "@/const";
 import {
   ArrowLeft, AlertTriangle, FileText, ListChecks, Heart,
   Eye, Plus, CheckCircle, Clock, MoreVertical,
-  LayoutGrid, BookOpen, User, Loader2, Forward, LogOut, Bed
+  LayoutGrid, BookOpen, GraduationCap, User, Loader2, Forward, LogOut, Bed
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BottomNav from "@/components/BottomNav";
+import PulseBoardBrand from "@/components/PulseBoardBrand";
 
 type PatientTab = "suivi" | "taches" | "vitaux" | "obs";
 
@@ -207,12 +208,7 @@ export default function PatientView() {
       {/* Sidebar */}
       <aside className="medboard-sidebar">
         <div className="p-5 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[var(--pulseboard-green)] flex items-center justify-center">
-              <Plus className="w-4 h-4 text-white rotate-45" />
-            </div>
-            <span className="font-bold text-base tracking-tight">PulseBoard</span>
-          </div>
+          <PulseBoardBrand />
         </div>
         <nav className="flex-1 px-3 py-4">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold px-3 mb-3">Menu principal</p>
@@ -224,6 +220,10 @@ export default function PatientView() {
             <button onClick={() => navigate(`/timeline/${patient.serviceId}`)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-gray-100 text-sm">
               <BookOpen className="w-4 h-4" />
               Journal
+            </button>
+            <button onClick={() => navigate("/mon-stage")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-gray-100 text-sm">
+              <GraduationCap className="w-4 h-4" />
+              Mon Stage
             </button>
             <button onClick={() => navigate("/profile")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-gray-100 text-sm">
               <User className="w-4 h-4" />
