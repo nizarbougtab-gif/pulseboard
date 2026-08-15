@@ -3,7 +3,7 @@ import PulseBoardBrand from "@/components/PulseBoardBrand";
 export function Privacy() {
   return <LegalPage title="Politique de confidentialité">
     <p>Version bêta — mise à jour du 12 août 2026.</p>
-    <h2>Données traitées</h2><p>PulseBoard traite les informations de compte, le rôle déclaré, les journaux de sécurité et les données saisies dans le carnet ou les espaces de service. Le carnet personnel masque les patients par initiales et ne conserve ni téléphone ni date de naissance.</p>
+    <h2>Données traitées</h2><p>PulseBoard traite les informations de compte, le rôle déclaré, les journaux de sécurité et les données saisies dans le carnet ou les espaces de service. Les nouveaux dossiers identifient les patients uniquement par leurs initiales. Le carnet personnel ne conserve ni téléphone ni date de naissance.</p>
     <h2>Finalités et accès</h2><p>Ces données servent à fournir le carnet de stage, coordonner une équipe autorisée, sécuriser les comptes et gérer les abonnements. Les dossiers collectifs restent visibles uniquement aux membres du service concerné selon leurs autorisations.</p>
     <h2>Conservation et droits</h2><p>Vous pouvez exporter les données de votre carnet et demander la suppression du compte depuis le profil. Une demande de suppression est vérifiée avant exécution afin d'éviter une perte ou une suppression frauduleuse.</p>
     <h2>Données de santé</h2><p>N'utilisez la version bêta qu'avec des données fictives ou correctement anonymisées tant que les formalités réglementaires, les contrats avec les établissements et l'hébergement de production n'ont pas été validés.</p>

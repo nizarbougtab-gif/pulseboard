@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward, LogOut } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { patientInitials } from "@shared/patientIdentity";
 
 const EXAMENS_COMMUNS = [
   "NFS", "CRP", "VS", "Glycémie", "Urée", "Créatinine",
@@ -141,7 +142,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[var(--pulseboard-green)]" />
-            {consultation.patientFirstName} {consultation.patientLastName}
+            {patientInitials(consultation.patientFirstName, consultation.patientLastName)}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Motif : {consultation.motif}</p>
           {consultation.disposition && (
@@ -291,7 +292,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Hospitaliser après consultation</DialogTitle>
-          <p className="text-sm text-muted-foreground">{consultation.patientFirstName} {consultation.patientLastName}</p>
+          <p className="text-sm text-muted-foreground">{patientInitials(consultation.patientFirstName, consultation.patientLastName)}</p>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>

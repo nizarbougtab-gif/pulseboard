@@ -63,6 +63,7 @@ export default function MonStage() {
 
   const createRotation = trpc.rotations.create.useMutation({
     onSuccess: () => { utils.rotations.mine.invalidate(); utils.personal.stats.invalidate(); toast.success("Rotation ajoutée"); setShowRotationDialog(false); setRotForm({ serviceName: "", hospitalName: "", supervisorName: "", startDate: "", endDate: "", notes: "" }); },
+    onError: error => toast.error(error.message),
   });
 
   const deleteRotation = trpc.rotations.delete.useMutation({
@@ -143,7 +144,7 @@ export default function MonStage() {
               {ROLE_LABELS[medicalRole as MedicalRole]}
             </span>
           )}
-          <button onClick={() => logout()} className="text-muted-foreground hover:text-[var(--pulseboard-red)] p-1">
+          <button type="button" onClick={() => logout()} aria-label="Se déconnecter" title="Se déconnecter" className="text-muted-foreground hover:text-[var(--pulseboard-red)] p-1">
             <LogOut className="w-4 h-4" />
           </button>
         </div>

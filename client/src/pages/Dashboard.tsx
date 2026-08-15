@@ -121,7 +121,7 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <button onClick={() => logout()} className="text-muted-foreground hover:text-[var(--pulseboard-red)] transition-colors">
+            <button type="button" onClick={() => logout()} aria-label="Se déconnecter" title="Se déconnecter" className="text-muted-foreground hover:text-[var(--pulseboard-red)] transition-colors">
               <LogOut className="w-4 h-4" />
             </button>
           </div>

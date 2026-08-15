@@ -20,6 +20,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BottomNav from "@/components/BottomNav";
 import PulseBoardBrand from "@/components/PulseBoardBrand";
+import { patientInitials } from "@shared/patientIdentity";
 
 type PatientTab = "suivi" | "taches" | "vitaux" | "obs";
 
@@ -245,7 +246,7 @@ export default function PatientView() {
             </button>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="font-semibold text-lg">{patient.firstName} {patient.lastName}</h1>
+                <h1 className="font-semibold text-lg">{patientInitials(patient.firstName, patient.lastName)}</h1>
                 <span className={`w-2.5 h-2.5 rounded-full ${patient.status === "critique" ? "bg-[var(--pulseboard-red)]" : patient.status === "modere" ? "bg-[var(--pulseboard-amber)]" : "bg-[var(--pulseboard-green)]"}`} />
               </div>
             </div>

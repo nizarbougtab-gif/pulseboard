@@ -5,6 +5,7 @@ import { Bed, Send, MessageSquare, X } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
+import { patientInitials } from "@shared/patientIdentity";
 
 interface Props {
   serviceId: number;
@@ -103,7 +104,7 @@ export default function ServiceChat({ serviceId, isOpen, onClose, inline }: Prop
                     >
                       <Bed className="h-3 w-3 shrink-0" />
                       <span className="truncate">
-                        Lit {msg.patientBedNumber ?? "—"} — {msg.patientFirstName} {msg.patientLastName}
+                        Lit {msg.patientBedNumber ?? "—"} — {patientInitials(msg.patientFirstName, msg.patientLastName)}
                       </span>
                     </button>
                   )}
@@ -151,7 +152,7 @@ export default function ServiceChat({ serviceId, isOpen, onClose, inline }: Prop
                       Lit {patient.bedNumber ?? "—"}
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{patient.firstName} {patient.lastName}</span>
+                      <span className="block truncate text-sm font-medium">{patientInitials(patient.firstName, patient.lastName)}</span>
                       {patient.diagnosis && <span className="block truncate text-[11px] text-muted-foreground">{patient.diagnosis}</span>}
                     </span>
                   </button>
@@ -164,7 +165,7 @@ export default function ServiceChat({ serviceId, isOpen, onClose, inline }: Prop
           <div className="mb-2 flex items-center gap-1.5">
             <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-[var(--pulseboard-green)]">
               <Bed className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Lit {selectedPatient.bedNumber ?? "—"} — {selectedPatient.firstName} {selectedPatient.lastName}</span>
+              <span className="truncate">Lit {selectedPatient.bedNumber ?? "—"} — {patientInitials(selectedPatient.firstName, selectedPatient.lastName)}</span>
               <button
                 type="button"
                 onClick={() => setSelectedPatientId(null)}

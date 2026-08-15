@@ -24,7 +24,7 @@ const clinical: Permission[] = [
 
 const PERMISSIONS: Record<MedicalRole, Permission[]> = {
   externe: common,
-  interne: [...clinical, "service.create"],
+  interne: [...clinical, "guard.manage", "service.create"],
   resident: [...clinical, "patient.discharge", "decision.review", "guard.manage", "service.create"],
   medecin: [...clinical, "patient.discharge", "decision.review", "guard.manage", "service.create", "service.manage"],
 };

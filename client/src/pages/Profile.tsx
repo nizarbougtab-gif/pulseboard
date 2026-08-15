@@ -7,12 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
-import { ArrowLeft, User, Building2, Stethoscope, Save, Download, CreditCard, Trash2 } from "lucide-react";
+import { ArrowLeft, User, Building2, Stethoscope, Save, Download, CreditCard, Trash2, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 export default function Profile() {
-  const { user, isAuthenticated, loading } = useAuth({
+  const { user, isAuthenticated, loading, logout } = useAuth({
     redirectOnUnauthenticated: true,
     redirectPath: getLoginUrl("/profile"),
   });
@@ -140,6 +140,7 @@ export default function Profile() {
               <Button variant="outline" className="w-full justify-start" onClick={() => navigate("/subscription")}><CreditCard className="w-4 h-4 mr-2" />Voir mon offre</Button>
               <Button variant="outline" className="w-full justify-start" disabled={exportData.isPending} onClick={() => exportData.mutate()}><Download className="w-4 h-4 mr-2" />Exporter les données de mon carnet</Button>
               <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled={deletion.isPending} onClick={() => { if (window.confirm("Demander la suppression de votre compte ? Cette demande sera vérifiée avant exécution.")) deletion.mutate({ confirmation: "SUPPRIMER" }); }}><Trash2 className="w-4 h-4 mr-2" />Demander la suppression du compte</Button>
+              <Button variant="outline" className="w-full justify-start" onClick={() => logout()}><LogOut className="w-4 h-4 mr-2" />Se déconnecter</Button>
               <p className="text-xs text-muted-foreground">Consultez aussi la <a className="underline" href="/privacy">politique de confidentialité</a> et les <a className="underline" href="/terms">conditions d'utilisation</a>.</p>
             </div>
           </CardContent>

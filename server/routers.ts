@@ -10,10 +10,17 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { canAutoJoinService, canDo, type Permission } from "../shared/permissions";
+import { patientInitials, sanitizePatientInitial } from "../shared/patientIdentity";
 import { createHash } from "node:crypto";
 
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const FORBIDDEN_MESSAGE = "Vous n'avez pas accès à cette ressource";
+
+function normalizePatientInitial(value: string) {
+  const initial = sanitizePatientInitial(value);
+  if (!initial) throw new TRPCError({ code: "BAD_REQUEST", message: "Une initiale valide est obligatoire" });
+  return initial;
+}
 
 async function makeSessionToken(openId: string, name: string) {
   if (!ENV.cookieSecret || ENV.cookieSecret.length < 32) {
@@ -349,13 +356,16 @@ export const appRouter = router({
       const { expectedDischarge, ...rest } = input;
       const id = await db.createPatient({
         ...rest,
+        firstName: normalizePatientInitial(rest.firstName),
+        lastName: normalizePatientInitial(rest.lastName),
         createdById: ctx.user.id,
         expectedDischarge: expectedDischarge || undefined,
       });
-      await db.logActivity({ serviceId: input.serviceId, patientId: id, userId: ctx.user.id, action: "patient_admitted", details: `${input.firstName} ${input.lastName} admis(e)` });
+      const displayName = patientInitials(input.firstName, input.lastName);
+      await db.logActivity({ serviceId: input.serviceId, patientId: id, userId: ctx.user.id, action: "patient_admitted", details: `${displayName} admis(e)` });
       // Auto-create alerts
       if (!input.bedNumber) {
-        await db.createAlert({ serviceId: input.serviceId, patientId: id, type: "no_bed", message: `${input.firstName} ${input.lastName} n'a pas de lit assigné` });
+        await db.createAlert({ serviceId: input.serviceId, patientId: id, type: "no_bed", message: `${displayName} n'a pas de lit assigné` });
       }
       return { id };
     }),
@@ -379,15 +389,18 @@ export const appRouter = router({
       await requireConfirmedServiceRole(patient.serviceId, ctx.user.id);
       const { id, expectedDischarge, actualDischarge, ...rest } = input;
       const updateData: any = { ...rest };
+      if (rest.firstName !== undefined) updateData.firstName = normalizePatientInitial(rest.firstName);
+      if (rest.lastName !== undefined) updateData.lastName = normalizePatientInitial(rest.lastName);
       if (expectedDischarge !== undefined) updateData.expectedDischarge = expectedDischarge || null;
       if (actualDischarge !== undefined) updateData.actualDischarge = actualDischarge || null;
       await db.updatePatient(id, updateData);
       const updatedPatient = await db.getPatientById(id);
       if (updatedPatient) {
-        await db.logActivity({ serviceId: updatedPatient.serviceId, patientId: id, userId: ctx.user.id, action: "patient_updated", details: `Patient ${updatedPatient.firstName} ${updatedPatient.lastName} mis à jour` });
+        const displayName = patientInitials(updatedPatient.firstName, updatedPatient.lastName);
+        await db.logActivity({ serviceId: updatedPatient.serviceId, patientId: id, userId: ctx.user.id, action: "patient_updated", details: `Patient ${displayName} mis à jour` });
         // Create critical alert if status changed to critique
         if (input.status === "critique") {
-          await db.createAlert({ serviceId: updatedPatient.serviceId, patientId: id, type: "critical_patient", message: `${updatedPatient.firstName} ${updatedPatient.lastName} est passé en état critique` });
+          await db.createAlert({ serviceId: updatedPatient.serviceId, patientId: id, type: "critical_patient", message: `${displayName} est passé en état critique` });
         }
       }
       return { success: true };
@@ -413,7 +426,7 @@ export const appRouter = router({
       const activePatients = await db.getPatientsByService(patient.serviceId, "tous");
       const occupant = activePatients.find(other => other.id !== patient.id && other.bedNumber === input.bedNumber);
       if (occupant) {
-        throw new TRPCError({ code: "CONFLICT", message: `Le lit ${input.bedNumber} est déjà occupé par ${occupant.firstName} ${occupant.lastName}` });
+        throw new TRPCError({ code: "CONFLICT", message: `Le lit ${input.bedNumber} est déjà occupé par ${patientInitials(occupant.firstName, occupant.lastName)}` });
       }
 
       await db.updatePatient(patient.id, { bedNumber: input.bedNumber });
@@ -423,7 +436,7 @@ export const appRouter = router({
         patientId: patient.id,
         userId: ctx.user.id,
         action: "bed_assigned",
-        details: `Lit ${input.bedNumber} attribué à ${patient.firstName} ${patient.lastName}`,
+        details: `Lit ${input.bedNumber} attribué à ${patientInitials(patient.firstName, patient.lastName)}`,
       });
       return { success: true };
     }),
@@ -439,7 +452,7 @@ export const appRouter = router({
         referralReason: null,
         referralDate: null,
       });
-      await db.logActivity({ serviceId: patient.serviceId, patientId: input.id, userId: ctx.user.id, action: "patient_discharged", details: `${patient.firstName} ${patient.lastName} sorti(e)` });
+      await db.logActivity({ serviceId: patient.serviceId, patientId: input.id, userId: ctx.user.id, action: "patient_discharged", details: `${patientInitials(patient.firstName, patient.lastName)} sorti(e)` });
       return { success: true };
     }),
     refer: protectedProcedure.input(z.object({
@@ -464,7 +477,7 @@ export const appRouter = router({
         patientId: input.id,
         userId: ctx.user.id,
         action: "patient_referred",
-        details: `${patient.firstName} ${patient.lastName} référé(e) vers ${input.destination} — ${input.reason}`,
+        details: `${patientInitials(patient.firstName, patient.lastName)} référé(e) vers ${input.destination} — ${input.reason}`,
       });
       return { success: true };
     }),
@@ -594,8 +607,10 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "consult.create");
-      const id = await db.createConsultation({ ...input, createdById: ctx.user.id });
-      await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "consultation_created", details: `Consultation ajoutée: ${input.patientFirstName} ${input.patientLastName}` });
+      const patientFirstName = normalizePatientInitial(input.patientFirstName);
+      const patientLastName = normalizePatientInitial(input.patientLastName);
+      const id = await db.createConsultation({ ...input, patientFirstName, patientLastName, createdById: ctx.user.id });
+      await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "consultation_created", details: `Consultation ajoutée : ${patientInitials(patientFirstName, patientLastName)}` });
       return { id };
     }),
     updateStatus: protectedProcedure.input(z.object({
@@ -659,7 +674,7 @@ export const appRouter = router({
           serviceId: consultation.serviceId,
           patientId,
           type: "no_bed",
-          message: `${consultation.patientFirstName} ${consultation.patientLastName} n'a pas de lit assigné`,
+          message: `${patientInitials(consultation.patientFirstName, consultation.patientLastName)} n'a pas de lit assigné`,
         });
       }
       await db.logActivity({
@@ -667,7 +682,7 @@ export const appRouter = router({
         patientId,
         userId: ctx.user.id,
         action: "consultation_hospitalized",
-        details: `${consultation.patientFirstName} ${consultation.patientLastName} hospitalisé(e) après consultation`,
+        details: `${patientInitials(consultation.patientFirstName, consultation.patientLastName)} hospitalisé(e) après consultation`,
       });
       return { patientId };
     }),
@@ -689,7 +704,7 @@ export const appRouter = router({
         serviceId: consultation.serviceId,
         userId: ctx.user.id,
         action: "consultation_discharged",
-        details: `${consultation.patientFirstName} ${consultation.patientLastName} sorti(e) après consultation`,
+        details: `${patientInitials(consultation.patientFirstName, consultation.patientLastName)} sorti(e) après consultation`,
       });
       return { success: true };
     }),
@@ -717,7 +732,7 @@ export const appRouter = router({
         serviceId: consultation.serviceId,
         userId: ctx.user.id,
         action: "consultation_referred",
-        details: `${consultation.patientFirstName} ${consultation.patientLastName} référé(e) vers ${input.destination} — ${input.reason}`,
+        details: `${patientInitials(consultation.patientFirstName, consultation.patientLastName)} référé(e) vers ${input.destination} — ${input.reason}`,
       });
       return { success: true };
     }),
@@ -887,7 +902,7 @@ export const appRouter = router({
               diagnosis: consultation.motif, notes: consultation.notes || consultation.rapport || undefined,
             });
             await db.updateConsultationDetails(consultation.id, { disposition: "hospitalise", linkedPatientId: patientId, status: "vu", closedAt: new Date() });
-            if (!proposal.bedNumber) await db.createAlert({ serviceId: consultation.serviceId, patientId, type: "no_bed", message: `${consultation.patientFirstName} ${consultation.patientLastName} n'a pas de lit assigné` });
+            if (!proposal.bedNumber) await db.createAlert({ serviceId: consultation.serviceId, patientId, type: "no_bed", message: `${patientInitials(consultation.patientFirstName, consultation.patientLastName)} n'a pas de lit assigné` });
           } else if (proposal.decisionType === "refere") {
             await db.updateConsultationDetails(consultation.id, {
               disposition: "refere", referralDestination: proposal.destination, referralReason: proposal.reason,
@@ -1003,7 +1018,7 @@ export const appRouter = router({
 
       const formatPatient = (p: any) => {
         const days = Math.floor((Date.now() - new Date(p.admissionDate).getTime()) / (1000 * 60 * 60 * 24));
-        return `• ${p.firstName} ${p.lastName} — Lit ${p.bedNumber || "N/A"} — J+${days} — ${p.diagnosis || "Diagnostic en cours"}`;
+        return `• ${patientInitials(p.firstName, p.lastName)} — Lit ${p.bedNumber || "N/A"} — J+${days} — ${p.diagnosis || "Diagnostic en cours"}`;
       };
 
       let content = `═══ RELÈVE DU SERVICE ═══\n`;
@@ -1052,7 +1067,10 @@ export const appRouter = router({
       endDate: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
-      await requireServiceMember(input.serviceId, ctx.user.id);
+      // A personal carnet can contain a rotation that is not attached to a
+      // collective PulseBoard service. In that case the UI sends the sentinel
+      // service id 0 and no service membership is required.
+      if (input.serviceId > 0) await requireServiceMember(input.serviceId, ctx.user.id);
       await requireRotationCapacity(ctx.user.id);
       return db.createRotation({ ...input, userId: ctx.user.id });
     }),
