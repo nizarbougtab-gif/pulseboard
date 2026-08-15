@@ -72,6 +72,7 @@ export default function MonStage() {
 
   const createComp = trpc.competences.create.useMutation({
     onSuccess: () => { utils.competences.mine.invalidate(); utils.personal.stats.invalidate(); toast.success("Compétence ajoutée"); setShowCompDialog(false); setCompForm({ title: "", category: "geste_technique", notes: "" }); },
+    onError: error => toast.error(error.message),
   });
 
   const validateComp = trpc.competences.validate.useMutation({
@@ -84,10 +85,12 @@ export default function MonStage() {
 
   const admitPersonalPatient = trpc.personalPatients.create.useMutation({
     onSuccess: () => { utils.personalPatients.list.invalidate(); setShowAdmitDialog(false); setAdmitForm({ firstName: "", lastName: "", gender: "M", dateOfBirth: "", phone: "", status: "stable", diagnosis: "", allergies: "", serviceName: "", bedNumber: "", encounterType: "hospitalisation" }); toast.success("Cas ajouté"); },
+    onError: error => toast.error(error.message),
   });
 
   const createProcedure = trpc.procedures.create.useMutation({
     onSuccess: () => { utils.procedures.mine.invalidate(); utils.personal.stats.invalidate(); setShowProcedureDialog(false); setProcedureForm({ title: "", rotationId: "", personalPatientId: "", participationLevel: "observed", outcome: "success", attempts: "1", reflection: "" }); toast.success("Geste documenté"); },
+    onError: error => toast.error(error.message),
   });
   const deleteProcedure = trpc.procedures.delete.useMutation({ onSuccess: () => utils.procedures.mine.invalidate() });
 

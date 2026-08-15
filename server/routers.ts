@@ -1017,7 +1017,7 @@ export const appRouter = router({
       const stables = allPatients.filter(p => p.status === "stable");
 
       const formatPatient = (p: any) => {
-        const days = Math.floor((Date.now() - new Date(p.admissionDate).getTime()) / (1000 * 60 * 60 * 24));
+        const days = Math.max(0, Math.floor((Date.now() - new Date(p.admissionDate).getTime()) / (1000 * 60 * 60 * 24)));
         return `• ${patientInitials(p.firstName, p.lastName)} — Lit ${p.bedNumber || "N/A"} — J+${days} — ${p.diagnosis || "Diagnostic en cours"}`;
       };
 
@@ -1152,7 +1152,6 @@ export const appRouter = router({
       const request = await db.getJoinRequestById(input.requestId);
       if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Demande introuvable" });
       await requireServiceChef(request.serviceId, ctx.user.id);
-      requirePermission(ctx.user.medicalRole, "service.manage");
       return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id);
     }),
     isChef: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {

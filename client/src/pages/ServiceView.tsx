@@ -24,6 +24,7 @@ import ServiceChat from "@/components/ServiceChat";
 import RelevePanel from "@/components/RelevePanel";
 import PulseBoardBrand from "@/components/PulseBoardBrand";
 import { patientInitials, patientInitialsCompact, sanitizePatientInitial } from "@shared/patientIdentity";
+import { ROLE_LABELS } from "@shared/permissions";
 
 type TabType = "lits" | "garde" | "messages" | "consult" | "releve";
 type FilterType = "tous" | "urgents" | "sortie_prevue" | "sortis";
@@ -89,6 +90,7 @@ export default function ServiceView() {
       utils.membership.pendingRequests.invalidate({ serviceId });
       toast.success(vars.approved ? "Membre accepté avec ses autorisations" : "Demande refusée");
     },
+    onError: error => toast.error(error.message),
   });
 
   const createConsultation = trpc.consultations.create.useMutation({
@@ -165,7 +167,7 @@ export default function ServiceView() {
 
   const getDaysSince = (date: Date | string) => {
     const d = new Date(date);
-    return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
   };
 
   const getDayClass = (days: number) => {
@@ -238,7 +240,7 @@ export default function ServiceView() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.name || "Utilisateur"}</p>
-              <p className="text-[11px] text-muted-foreground uppercase">Médecin</p>
+              <p className="text-[11px] text-muted-foreground uppercase">{ROLE_LABELS[user?.medicalRole as keyof typeof ROLE_LABELS] ?? "Professionnel"}</p>
             </div>
           </div>
         </div>
@@ -306,8 +308,8 @@ export default function ServiceView() {
                         ({r.medicalRole === "externe" ? "Étudiant / Externe" : r.medicalRole === "interne" ? "Interne" : r.medicalRole === "resident" ? "Résident" : "Médecin"}) demande à rejoindre
                       </span>
                     </span>
-                    <button onClick={() => resolveRequest.mutate({ requestId: r.id, approved: true })} className="text-[var(--pulseboard-green)] hover:opacity-70"><Check className="w-4 h-4" /></button>
-                    <button onClick={() => resolveRequest.mutate({ requestId: r.id, approved: false })} className="text-[var(--pulseboard-red)] hover:opacity-70"><X className="w-4 h-4" /></button>
+                    <button aria-label={`Accepter ${r.userName || "ce membre"}`} disabled={resolveRequest.isPending} onClick={() => resolveRequest.mutate({ requestId: r.id, approved: true })} className="text-[var(--pulseboard-green)] hover:opacity-70 disabled:opacity-50"><Check className="w-4 h-4" /></button>
+                    <button aria-label={`Refuser ${r.userName || "ce membre"}`} disabled={resolveRequest.isPending} onClick={() => resolveRequest.mutate({ requestId: r.id, approved: false })} className="text-[var(--pulseboard-red)] hover:opacity-70 disabled:opacity-50"><X className="w-4 h-4" /></button>
                   </div>
                 ))}
               </div>

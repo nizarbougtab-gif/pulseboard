@@ -164,7 +164,7 @@ export default function PatientView() {
     onError: error => toast.error(error.message),
   });
 
-  const getDaysSince = (date: Date | string) => Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
+  const getDaysSince = (date: Date | string) => Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24)));
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-[var(--pulseboard-green)] border-t-transparent rounded-full animate-spin" /></div>;
