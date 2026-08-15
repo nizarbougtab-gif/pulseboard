@@ -16,7 +16,7 @@ export function Terms() {
     <p>Version bêta — mise à jour du 12 août 2026.</p>
     <h2>Objet</h2><p>PulseBoard est un outil d'organisation et de documentation de stage. Il ne remplace ni le dossier médical officiel, ni les protocoles de l'établissement, ni le jugement d'un professionnel habilité.</p>
     <h2>Responsabilités</h2><p>L'utilisateur confirme disposer de l'autorisation nécessaire pour accéder à un service et saisir une information. Il doit éviter toute identité complète dans le carnet personnel et protéger ses identifiants.</p>
-    <h2>Offres</h2><p>L'essai gratuit permet jusqu'à trois cas anonymisés et une rotation. Le Carnet Pro est proposé à 3 000 FCFA par mois et Hall + Carnet à 5 000 FCFA par utilisateur et par mois. Le paiement ne devient effectif qu'après confirmation par PulseBoard.</p>
+    <h2>Offres</h2><p>L'essai gratuit permet jusqu'à trois cas anonymisés et une rotation. Le Carnet Pro est proposé à 3 500 FCFA par mois ou 35 000 FCFA par an. Hall + Carnet est proposé à 6 000 FCFA par utilisateur et par mois ou 60 000 FCFA par utilisateur et par an. Le paiement ne devient effectif qu'après confirmation par PulseBoard.</p>
     <h2>Bêta</h2><p>La disponibilité, le support, les modalités de remboursement et l'identité commerciale finale seront précisés avant la vente au public.</p>
   </LegalPage>;
 }

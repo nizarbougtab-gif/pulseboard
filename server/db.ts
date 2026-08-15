@@ -98,7 +98,7 @@ export async function getFreePlanUsage(userId: number) {
 }
 
 export async function createPaymentRequest(userId: number, plan: "carnet_pro" | "hall_carnet", billingCycle: "monthly" | "annual", reference: string) {
-  const monthly = plan === "carnet_pro" ? 3000 : 5000;
+  const monthly = plan === "carnet_pro" ? 3500 : 6000;
   const amountFcfa = billingCycle === "annual" ? monthly * 10 : monthly;
   const db = getDb();
   const [{ id }] = await db.insert(payments).values({ userId, plan, billingCycle, reference, amountFcfa }).returning({ id: payments.id });
