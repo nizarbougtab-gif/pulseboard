@@ -142,7 +142,7 @@ export default function Home() {
               <h2 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">Le carnet qui se construit pendant que vous travaillez.</h2>
               <p className="mt-5 max-w-xl leading-7 text-slate-300">Importez un cas sous forme anonymisée, documentez les gestes réalisés et gardez vos apprentissages dans un espace personnel séparé du service.</p>
               <ul className="mt-8 space-y-4 text-sm text-slate-200">
-                {['Initiales uniquement dans le carnet personnel','Gestes observés, supervisés ou réalisés en autonomie','Notes de stage et cas cliniques structurés','Historique personnel conservé entre les rotations'].map(item=><li key={item} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300"/>{item}</li>)}
+                {['Patients identifiés uniquement par leurs initiales','Gestes observés, supervisés ou réalisés en autonomie','Notes de stage et cas cliniques structurés','Historique personnel conservé entre les rotations'].map(item=><li key={item} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300"/>{item}</li>)}
               </ul>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur sm:p-7">
@@ -166,7 +166,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="border-t border-slate-200 bg-white py-10"><div className="container flex flex-col items-center justify-between gap-6 md:flex-row"><PulseBoardBrand/><p className="text-center text-xs text-slate-500">© 2026 PulseBoard · Outil de coordination et de formation clinique</p><div className="flex gap-5 text-xs text-slate-500"><a href="#tarifs">Tarifs</a><a href="mailto:contact@pulseboardsn.com">Contact</a></div></div></footer>
+      <footer className="border-t border-slate-200 bg-white py-10"><div className="container flex flex-col items-center justify-between gap-6 md:flex-row"><PulseBoardBrand/><p className="text-center text-xs text-slate-500">© 2026 PulseBoard · Outil de coordination et de formation clinique</p><div className="flex flex-wrap justify-center gap-5 text-xs text-slate-500"><a href="#tarifs">Tarifs</a><a href="/privacy">Confidentialité</a><a href="/terms">Conditions</a><a href="mailto:contact@pulseboardsn.com">Contact</a></div></div></footer>
     </div>
   );
 }

@@ -20,6 +20,8 @@ describe("clinical permissions", () => {
 
   it("allows interns and residents to create their own service", () => {
     expect(canDo("interne", "service.create")).toBe(true);
+    expect(canDo("interne", "guard.manage")).toBe(true);
+    expect(canDo("interne", "patient.discharge")).toBe(false);
     expect(canDo("resident", "service.create")).toBe(true);
     expect(canDo("externe", "service.create")).toBe(false);
   });

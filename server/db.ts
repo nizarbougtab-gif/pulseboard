@@ -4,6 +4,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
 import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { patientInitials } from "../shared/patientIdentity";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
 
@@ -567,10 +568,10 @@ export async function getCareDecisionProposals(serviceId: number, pendingOnly = 
   const enriched = await Promise.all(rows.map(async row => {
     if (row.subjectType === "patient") {
       const patient = await getPatientById(row.subjectId);
-      return { ...row, subjectName: patient ? `${patient.firstName} ${patient.lastName}` : `Patient #${row.subjectId}`, subjectBedNumber: patient?.bedNumber ?? null };
+      return { ...row, subjectName: patient ? patientInitials(patient.firstName, patient.lastName) : `Patient #${row.subjectId}`, subjectBedNumber: patient?.bedNumber ?? null };
     }
     const consultation = await getConsultationById(row.subjectId);
-    return { ...row, subjectName: consultation ? `${consultation.patientFirstName} ${consultation.patientLastName}` : `Consultation #${row.subjectId}`, subjectBedNumber: null };
+    return { ...row, subjectName: consultation ? patientInitials(consultation.patientFirstName, consultation.patientLastName) : `Consultation #${row.subjectId}`, subjectBedNumber: null };
   }));
   return enriched.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }

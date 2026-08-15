@@ -23,6 +23,7 @@ import BottomNav from "@/components/BottomNav";
 import ServiceChat from "@/components/ServiceChat";
 import RelevePanel from "@/components/RelevePanel";
 import PulseBoardBrand from "@/components/PulseBoardBrand";
+import { patientInitials, patientInitialsCompact, sanitizePatientInitial } from "@shared/patientIdentity";
 
 type TabType = "lits" | "garde" | "messages" | "consult" | "releve";
 type FilterType = "tous" | "urgents" | "sortie_prevue" | "sortis";
@@ -58,19 +59,19 @@ export default function ServiceView() {
   const { data: consultations = [] } = trpc.consultations.list.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const { data: decisionProposals = [] } = trpc.decisionProposals.list.useQuery(
     { serviceId, pendingOnly: true },
-    { enabled: serviceId > 0 }
+    { enabled: serviceId > 0 && activeTab === "messages" }
   );
   const { data: allDecisionProposals = [] } = trpc.decisionProposals.list.useQuery(
     { serviceId, pendingOnly: false },
-    { enabled: serviceId > 0 }
+    { enabled: serviceId > 0 && activeTab === "messages" && messageSection === "decisions" }
   );
   const { data: hospitals = [] } = trpc.hospitals.list.useQuery();
   const { data: isChef } = trpc.membership.isChef.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const hasConfirmedRole = memberRole !== undefined && memberRole !== "stagiaire";
   const { data: pendingRequests = [] } = trpc.membership.pendingRequests.useQuery({ serviceId }, { enabled: !!isChef });
-  const { data: members = [] } = trpc.services.members.useQuery({ serviceId }, { enabled: serviceId > 0 });
-  const { data: guards = [] } = trpc.guards.list.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const { data: members = [] } = trpc.services.members.useQuery({ serviceId }, { enabled: serviceId > 0 && (activeTab === "garde" || showGuardDialog) });
+  const { data: guards = [] } = trpc.guards.list.useQuery({ serviceId }, { enabled: serviceId > 0 && activeTab === "garde" });
 
   const utils = trpc.useUtils();
 
@@ -470,7 +471,7 @@ export default function ServiceView() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          <span className="font-medium text-sm truncate">{patient.firstName} {patient.lastName}</span>
+                          <span className="font-medium text-sm truncate">{patientInitials(patient.firstName, patient.lastName)}</span>
                           <span className={`day-badge ${getDayClass(days)}`}>J+{days}</span>
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
@@ -522,8 +523,8 @@ export default function ServiceView() {
               <div key={guard.id} className={`bg-white rounded-xl border p-4 ${guard.status === "active" ? "border-[var(--pulseboard-green)]" : "border-border/50"}`}>
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="flex items-center gap-2 flex-wrap"><h3 className="font-semibold text-sm">Garde du {new Date(guard.startsAt).toLocaleDateString("fr-FR")}</h3><Badge className={guard.status === "active" ? "bg-[var(--pulseboard-green-light)] text-[var(--pulseboard-green)]" : guard.status === "ended" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-800"}>{guard.status === "active" ? "En cours" : guard.status === "ended" ? "Terminée" : "Planifiée"}</Badge></div><p className="text-xs text-muted-foreground mt-1">{new Date(guard.startsAt).toLocaleString("fr-FR")} → {new Date(guard.endsAt).toLocaleString("fr-FR")}</p></div>{can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="flex gap-2">{guard.status === "scheduled" && <Button size="sm" className="min-h-10 bg-[var(--pulseboard-green)] text-white" onClick={() => setGuardStatus.mutate({ id: guard.id, status: "active" })}>Commencer la garde</Button>}{guard.status === "active" && <Button size="sm" className="min-h-10" variant="outline" onClick={() => { const summary = prompt("Résumé obligatoire de fin de garde :"); if (summary?.trim()) setGuardStatus.mutate({ id: guard.id, status: "ended", summary }); }}>Terminer la garde</Button>}</div>}</div>
                 <div className="mt-3"><p className="text-xs font-semibold mb-1">Équipe</p><div className="flex flex-wrap gap-1">{guard.members.map((m:any) => <Badge key={m.id} variant="outline">{m.userName || `Membre #${m.userId}`} · {m.dutyRole === "student" ? "Étudiant" : m.dutyRole === "supervisor" ? "Superviseur" : "Clinicien"}</Badge>)}</div></div>
-                <div className="mt-3"><p className="text-xs font-semibold mb-1">Patients attribués</p>{guard.assignments.length ? guard.assignments.map((a:any) => <div key={a.id} className="text-xs bg-gray-50 rounded-lg p-2 mb-1">Lit {a.bedNumber || "—"} · {a.patientFirstName} {a.patientLastName} → membre #{a.assignedToId}{a.notes ? ` · ${a.notes}` : ""}</div>) : <p className="text-xs text-muted-foreground">Aucun patient attribué.</p>}</div>
-                {can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mt-3"><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.patientId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), patientId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Patient" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir patient</SelectItem>{patients.filter(p=>!p.actualDischarge).map(p=><SelectItem key={p.id} value={String(p.id)}>Lit {p.bedNumber || "—"} · {p.firstName} {p.lastName}</SelectItem>)}</SelectContent></Select><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.assignedToId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), assignedToId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Membre" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir membre</SelectItem>{guard.members.map((m:any)=><SelectItem key={m.userId} value={String(m.userId)}>{m.userName || `Membre #${m.userId}`}</SelectItem>)}</SelectContent></Select><Input placeholder="Consigne" value={guardAssignment.guardId === String(guard.id) ? guardAssignment.notes : ""} onChange={e => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), notes: e.target.value }))} /><Button disabled={guardAssignment.guardId !== String(guard.id) || !guardAssignment.patientId || !guardAssignment.assignedToId || assignGuardPatient.isPending} onClick={() => assignGuardPatient.mutate({ guardId: guard.id, patientId: Number(guardAssignment.patientId), assignedToId: Number(guardAssignment.assignedToId), notes: guardAssignment.notes || undefined })}>Attribuer</Button></div>}
+                <div className="mt-3"><p className="text-xs font-semibold mb-1">Patients attribués</p>{guard.assignments.length ? guard.assignments.map((a:any) => <div key={a.id} className="text-xs bg-gray-50 rounded-lg p-2 mb-1">Lit {a.bedNumber || "—"} · {patientInitials(a.patientFirstName, a.patientLastName)} → membre #{a.assignedToId}{a.notes ? ` · ${a.notes}` : ""}</div>) : <p className="text-xs text-muted-foreground">Aucun patient attribué.</p>}</div>
+                {can("guard.manage") && hasConfirmedRole && guard.status !== "ended" && <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mt-3"><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.patientId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), patientId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Patient" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir patient</SelectItem>{patients.filter(p=>!p.actualDischarge).map(p=><SelectItem key={p.id} value={String(p.id)}>Lit {p.bedNumber || "—"} · {patientInitials(p.firstName, p.lastName)}</SelectItem>)}</SelectContent></Select><Select value={guardAssignment.guardId === String(guard.id) ? guardAssignment.assignedToId || "none" : "none"} onValueChange={v => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), assignedToId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Membre" /></SelectTrigger><SelectContent><SelectItem value="none">Choisir membre</SelectItem>{guard.members.map((m:any)=><SelectItem key={m.userId} value={String(m.userId)}>{m.userName || `Membre #${m.userId}`}</SelectItem>)}</SelectContent></Select><Input placeholder="Consigne" value={guardAssignment.guardId === String(guard.id) ? guardAssignment.notes : ""} onChange={e => setGuardAssignment(f => ({ ...f, guardId: String(guard.id), notes: e.target.value }))} /><Button disabled={guardAssignment.guardId !== String(guard.id) || !guardAssignment.patientId || !guardAssignment.assignedToId || assignGuardPatient.isPending} onClick={() => assignGuardPatient.mutate({ guardId: guard.id, patientId: Number(guardAssignment.patientId), assignedToId: Number(guardAssignment.assignedToId), notes: guardAssignment.notes || undefined })}>Attribuer</Button></div>}
                 {guard.summary && <div className="mt-3 text-xs bg-[var(--pulseboard-green-light)] rounded-lg p-3"><b>Résumé :</b> {guard.summary}</div>}
               </div>
             ))}
@@ -669,7 +670,7 @@ export default function ServiceView() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{c.patientFirstName} {c.patientLastName}</span>
+                        <span className="font-medium text-sm">{patientInitials(c.patientFirstName, c.patientLastName)}</span>
                         <Badge variant="outline" className={`text-[10px] ${c.status === "vu" ? "text-[var(--pulseboard-green)] border-[var(--pulseboard-green)]/30" : c.status === "reporte" ? "text-[var(--pulseboard-red)] border-[var(--pulseboard-red)]/30" : "text-[var(--pulseboard-amber)] border-[var(--pulseboard-amber)]/30"}`}>
                           {c.status === "vu" ? "Vu" : c.status === "reporte" ? "Reporté" : "En attente"}
                         </Badge>
@@ -859,10 +860,10 @@ export default function ServiceView() {
                       className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 text-left border-b last:border-0"
                     >
                       <div className="w-7 h-7 rounded-full bg-[var(--pulseboard-green-light)] flex items-center justify-center text-[var(--pulseboard-green)] text-xs font-bold shrink-0">
-                        {p.firstName[0]}{p.lastName[0]}
+                        {patientInitialsCompact(p.firstName, p.lastName)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{p.firstName} {p.lastName}</p>
+                        <p className="text-sm font-medium">{patientInitials(p.firstName, p.lastName)}</p>
                         <p className="text-xs text-muted-foreground truncate">{p.diagnosis || "Diagnostic en cours"} · {p.serviceName || "Service inconnu"}</p>
                       </div>
                       <span className={`text-xs font-semibold ${p.status === "critique" ? "text-[var(--pulseboard-red)]" : p.status === "modere" ? "text-[var(--pulseboard-amber)]" : "text-[var(--pulseboard-green)]"}`}>
@@ -879,20 +880,24 @@ export default function ServiceView() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Prénom</Label>
+                <Label className="text-xs">Initiale du prénom</Label>
                 <Input
-                  placeholder="Prénom"
+                  maxLength={1}
+                  autoComplete="off"
+                  placeholder="A"
                   value={consultForm.firstName}
-                  onChange={e => setConsultForm(p => ({ ...p, firstName: e.target.value }))}
+                  onChange={e => setConsultForm(p => ({ ...p, firstName: sanitizePatientInitial(e.target.value) }))}
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label className="text-xs">Nom</Label>
+                <Label className="text-xs">Initiale du nom</Label>
                 <Input
-                  placeholder="Nom"
+                  maxLength={1}
+                  autoComplete="off"
+                  placeholder="N"
                   value={consultForm.lastName}
-                  onChange={e => setConsultForm(p => ({ ...p, lastName: e.target.value }))}
+                  onChange={e => setConsultForm(p => ({ ...p, lastName: sanitizePatientInitial(e.target.value) }))}
                   className="mt-1"
                 />
               </div>

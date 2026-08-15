@@ -8,6 +8,7 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Bed, Stethoscope } from "lucide-react";
+import { sanitizePatientInitial } from "@shared/patientIdentity";
 
 type CarePath = "hospitalisation" | "consultation";
 
@@ -78,7 +79,7 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) {
-      toast.error("Le nom et le prénom sont obligatoires");
+      toast.error("Les initiales du patient sont obligatoires");
       return;
     }
 
@@ -144,12 +145,12 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Nom *</Label>
-              <Input placeholder="Nom de famille" value={lastName} onChange={e => setLastName(e.target.value)} />
+              <Label>Initiale du nom *</Label>
+              <Input maxLength={1} autoComplete="off" placeholder="N" value={lastName} onChange={e => setLastName(sanitizePatientInitial(e.target.value))} />
             </div>
             <div className="space-y-2">
-              <Label>Prénom *</Label>
-              <Input placeholder="Prénom" value={firstName} onChange={e => setFirstName(e.target.value)} />
+              <Label>Initiale du prénom *</Label>
+              <Input maxLength={1} autoComplete="off" placeholder="A" value={firstName} onChange={e => setFirstName(sanitizePatientInitial(e.target.value))} />
             </div>
           </div>
 
