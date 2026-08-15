@@ -29,19 +29,19 @@ const plans = [
   },
   {
     name: "Carnet Pro",
-    price: "3 000 FCFA",
+    price: "3 500 FCFA",
     period: "/ mois",
     description: "Pour les étudiants et professionnels qui veulent construire un carnet complet sans limite.",
-    features: ["Cas anonymisés illimités", "Services et rotations multiples", "Gestes, notes et compétences", "Exports PDF et Excel", "Sauvegarde continue du carnet", "30 000 FCFA par an"],
+    features: ["Cas anonymisés illimités", "Services et rotations multiples", "Gestes, notes et compétences", "Exports PDF et Excel", "Sauvegarde continue du carnet", "35 000 FCFA par an"],
     action: "Choisir Carnet Pro",
     highlighted: true,
   },
   {
     name: "Hall + Carnet",
-    price: "5 000 FCFA",
+    price: "6 000 FCFA",
     period: "/ utilisateur / mois",
     description: "Pour travailler avec l’équipe médicale tout en conservant son carnet personnel.",
-    features: ["Tout le forfait Carnet Pro", "Hall collectif et gestion des lits", "Consultations, gardes et relèves", "Messagerie et alertes cliniques", "Journal des décisions", "Traçabilité des tâches"],
+    features: ["Tout le forfait Carnet Pro", "Hall collectif et gestion des lits", "Consultations, gardes et relèves", "Messagerie et alertes cliniques", "Journal des décisions", "Traçabilité des tâches", "60 000 FCFA par utilisateur et par an"],
     action: "Choisir Hall + Carnet",
   },
 ];
