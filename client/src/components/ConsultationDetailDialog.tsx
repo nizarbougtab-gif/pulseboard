@@ -41,9 +41,9 @@ interface Props {
 
 export default function ConsultationDetailDialog({ open, onOpenChange, consultation }: Props) {
   const { can } = useAuth();
-  const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId: consultation.serviceId }, { enabled: open });
-  const canApplyDecision = can("patient.discharge") && memberRole !== undefined && memberRole !== "stagiaire";
-  const canHospitalize = can("patient.admit") && memberRole !== undefined && memberRole !== "stagiaire";
+  const { data: membership } = trpc.membership.myMembership.useQuery({ serviceId: consultation.serviceId }, { enabled: open });
+  const canApplyDecision = can("patient.discharge") && membership?.role !== undefined && membership.role !== "stagiaire" && !membership.provisional;
+  const canHospitalize = can("patient.admit") && membership?.role !== undefined && membership.role !== "stagiaire";
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
   const [rapport, setRapport] = useState(consultation.rapport || "");

@@ -20,17 +20,23 @@ import PulseBoardBrand from "@/components/PulseBoardBrand";
 export default function Dashboard() {
   const { user, medicalRole, isAuthenticated, loading, logout, can } = useAuth({
     redirectOnUnauthenticated: true,
-    redirectPath: getLoginUrl("/dashboard"),
+    redirectPath: getLoginUrl(`${window.location.pathname}${window.location.search}`),
   });
   const [, navigate] = useLocation();
   const [showCreateService, setShowCreateService] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [joinCode, setJoinCode] = useState("");
+  const [invitationToken, setInvitationToken] = useState("");
   const [copied, setCopied] = useState<number | null>(null);
 
   useEffect(() => {
-    const invitationCode = new URLSearchParams(window.location.search).get("join");
-    if (invitationCode) {
+    const params = new URLSearchParams(window.location.search);
+    const secureInvitation = params.get("invite");
+    const invitationCode = params.get("join");
+    if (secureInvitation) {
+      setInvitationToken(secureInvitation);
+      setShowJoinDialog(true);
+    } else if (invitationCode) {
       setJoinCode(invitationCode.toUpperCase());
       setShowJoinDialog(true);
     }
@@ -38,8 +44,8 @@ export default function Dashboard() {
 
   const joinService = trpc.membership.join.useMutation({
     onSuccess: (result) => {
-      if (result.status === "joined") { toast.success("Accès immédiat au hall du service !"); setShowJoinDialog(false); setJoinCode(""); window.history.replaceState({}, "", "/dashboard"); utils.services.list.invalidate(); }
-      else if (result.status === "pending") { toast.info("Demande envoyée — en attente d'approbation du chef de service"); setShowJoinDialog(false); setJoinCode(""); }
+      if (result.status === "joined") { toast.success(result.provisional ? "Accès provisoire immédiat au Hall : les décisions sensibles restent à valider" : "Accès immédiat au Hall du service !"); setShowJoinDialog(false); setJoinCode(""); setInvitationToken(""); window.history.replaceState({}, "", "/dashboard"); utils.services.list.invalidate(); }
+      else if (result.status === "pending") { toast.info("Demande envoyée — en attente d'approbation du coordinateur du Hall"); setShowJoinDialog(false); setJoinCode(""); setInvitationToken(""); }
       else if (result.status === "already_member") { toast.info("Vous êtes déjà membre de ce service"); }
     },
     onError: (e) => toast.error(e.message),
@@ -171,20 +177,24 @@ export default function Dashboard() {
         <Dialog open={showJoinDialog} onOpenChange={setShowJoinDialog}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader><DialogTitle>Rejoindre un service</DialogTitle></DialogHeader>
-            <p className="text-sm text-muted-foreground">Entre le code du service fourni par le chef de service.</p>
-            <Input
-              placeholder="ex: ORL-4829"
-              value={joinCode}
-              onChange={e => setJoinCode(e.target.value.toUpperCase())}
-              className="text-center text-lg tracking-widest font-mono"
-              maxLength={8}
-            />
+            <p className="text-sm text-muted-foreground">
+              {invitationToken ? "Invitation sécurisée détectée. Confirme pour entrer immédiatement dans le Hall." : "Entre le code du service fourni par le coordinateur du Hall."}
+            </p>
+            {!invitationToken && (
+              <Input
+                placeholder="ex: ORL-4829"
+                value={joinCode}
+                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                className="text-center text-lg tracking-widest font-mono"
+                maxLength={8}
+              />
+            )}
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowJoinDialog(false)}>Annuler</Button>
               <Button
                 className="bg-[var(--pulseboard-green)] text-white"
-                disabled={joinCode.length < 4 || joinService.isPending}
-                onClick={() => joinService.mutate({ code: joinCode })}
+                disabled={(!invitationToken && joinCode.length < 4) || joinService.isPending}
+                onClick={() => joinService.mutate(invitationToken ? { invitationToken } : { code: joinCode })}
               >
                 Rejoindre
               </Button>
