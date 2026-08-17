@@ -45,6 +45,10 @@ export function canAutoJoinService(
   );
 }
 
+export function canJoinImmediatelyWithInvitation(role: MedicalRole | null | undefined): boolean {
+  return Boolean(role && role !== "externe");
+}
+
 export const ROLE_LABELS: Record<MedicalRole, string> = {
   externe: "Étudiant / Externe",
   interne: "Interne",

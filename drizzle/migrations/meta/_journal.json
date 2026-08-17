@@ -57,6 +57,13 @@
       "when": 1786492800000,
       "tag": "0007_accounts_billing_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786924800000,
+      "tag": "0008_secure_hall_invitations",
+      "breakpoints": true
     }
   ]
 }

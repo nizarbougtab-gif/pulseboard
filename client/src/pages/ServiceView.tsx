@@ -69,12 +69,23 @@ export default function ServiceView() {
   const { data: hospitals = [] } = trpc.hospitals.list.useQuery();
   const { data: isChef } = trpc.membership.isChef.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId }, { enabled: serviceId > 0 });
+  const { data: membership } = trpc.membership.myMembership.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const hasConfirmedRole = memberRole !== undefined && memberRole !== "stagiaire";
   const { data: pendingRequests = [] } = trpc.membership.pendingRequests.useQuery({ serviceId }, { enabled: !!isChef });
   const { data: members = [] } = trpc.services.members.useQuery({ serviceId }, { enabled: serviceId > 0 && (activeTab === "garde" || showGuardDialog) });
   const { data: guards = [] } = trpc.guards.list.useQuery({ serviceId }, { enabled: serviceId > 0 && activeTab === "garde" });
 
   const utils = trpc.useUtils();
+
+  const createInvitation = trpc.membership.createInvitation.useMutation({
+    onSuccess: async ({ token, expiresAt }) => {
+      await navigator.clipboard.writeText(`${window.location.origin}/dashboard?invite=${token}`);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+      toast.success(`Lien sécurisé copié — valable jusqu'au ${new Date(expiresAt).toLocaleString("fr-FR")}`);
+    },
+    onError: error => toast.error(error.message),
+  });
 
   const { data: searchResults = [] } = trpc.patients.search.useQuery(
     { query: patientSearch },
@@ -269,7 +280,9 @@ export default function ServiceView() {
             <div className="flex items-center gap-2 flex-wrap">
               <Stethoscope className="w-4 h-4 text-[var(--pulseboard-green)]" />
               <h1 className="font-semibold text-base truncate max-w-[65vw] sm:max-w-none">{service.name}</h1>
-              {(service as any).code && hasConfirmedRole && (
+              {isChef && <Badge variant="outline">Coordinateur du Hall</Badge>}
+              {membership?.provisional && <Badge className="bg-amber-100 text-amber-800">Accès provisoire</Badge>}
+              {(service as any).code && isChef && (
                 <button
                   onClick={() => { navigator.clipboard.writeText((service as any).code); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); }}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-xs font-mono text-muted-foreground transition-colors"
@@ -279,16 +292,14 @@ export default function ServiceView() {
                   {codeCopied ? <Check className="w-3 h-3 text-[var(--pulseboard-green)]" /> : <Copy className="w-3 h-3" />}
                 </button>
               )}
-              {(service as any).code && hasConfirmedRole && (
+              {isChef && (
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/dashboard?join=${(service as any).code}`);
-                    toast.success("Lien d’invitation copié");
-                  }}
+                  onClick={() => createInvitation.mutate({ serviceId })}
+                  disabled={createInvitation.isPending}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--pulseboard-green-light)] hover:opacity-80 text-xs text-[var(--pulseboard-green)] transition-colors"
                   title="Copier le lien d’invitation"
                 >
-                  <Users className="w-3 h-3" /> Inviter
+                  <Users className="w-3 h-3" /> {createInvitation.isPending ? "Création..." : "Inviter (72 h)"}
                 </button>
               )}
               {pendingRequests.length > 0 && (
@@ -571,7 +582,7 @@ export default function ServiceView() {
                         {proposal.destination && <p className="text-xs mt-1">Destination : {proposal.destination}</p>}
                         {proposal.reason && <p className="text-xs text-muted-foreground truncate">Motif : {proposal.reason}</p>}
                       </div>
-                      {can("decision.review") && hasConfirmedRole ? (
+                      {can("decision.review") && hasConfirmedRole && !membership?.provisional ? (
                         <div className="flex gap-2 shrink-0">
                           <Button size="sm" variant="outline" disabled={reviewDecision.isPending} onClick={() => { const reviewNote = prompt("Pourquoi refusez-vous cette proposition ? (obligatoire)"); if (reviewNote?.trim()) reviewDecision.mutate({ id: proposal.id, approved: false, reviewNote }); }}>
                             <X className="w-3.5 h-3.5 mr-1" /> Refuser

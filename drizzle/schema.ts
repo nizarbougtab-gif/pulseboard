@@ -112,7 +112,20 @@ export const serviceMembers = pgTable("service_members", {
   serviceId: integer("serviceId").notNull(),
   userId: integer("userId").notNull(),
   role: text("memberRole").$type<"chef" | "senior" | "junior" | "stagiaire">().default("junior"),
+  provisional: boolean("provisional").default(false).notNull(),
   joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+});
+
+export const serviceInvitations = pgTable("service_invitations", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("serviceId").notNull(),
+  tokenHash: text("tokenHash").notNull().unique(),
+  createdById: integer("createdById").notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  maxUses: integer("maxUses").default(20).notNull(),
+  usedCount: integer("usedCount").default(0).notNull(),
+  revokedAt: timestamp("revokedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export const patients = pgTable("patients", {

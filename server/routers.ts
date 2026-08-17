@@ -9,7 +9,7 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { canAutoJoinService, canDo, type Permission } from "../shared/permissions";
+import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation, type Permission } from "../shared/permissions";
 import { patientInitials, sanitizePatientInitial } from "../shared/patientIdentity";
 import { createHash } from "node:crypto";
 
@@ -74,7 +74,18 @@ async function requirePersonalPatient(personalPatientId: number, userId: number)
   return patient;
 }
 
+async function requireVerifiedServiceRole(serviceId: number, userId: number) {
+  const membership = await db.getServiceMembership(serviceId, userId);
+  if (!membership || membership.role === "stagiaire" || membership.provisional) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Votre accès au Hall est provisoire : proposez cette décision à un membre vérifié pour validation",
+    });
+  }
+}
+
 const hashAccountToken = (token: string) => createHash("sha256").update(token).digest("hex");
+const hashInvitationToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 function publicAppUrl(req: { protocol: string; get(name: string): string | undefined }) {
   return (ENV.publicAppUrl || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
@@ -290,7 +301,8 @@ export const appRouter = router({
     })).mutation(async ({ ctx, input }) => {
       await requireHallPlan(ctx.user.id);
       requirePermission(ctx.user.medicalRole, "service.create");
-      const { id, code } = await db.createService({ ...input, createdById: ctx.user.id });
+      const creatorProvisional = !(ctx.user.medicalRoleVerified && ctx.user.hospitalId === input.hospitalId);
+      const { id, code } = await db.createService({ ...input, createdById: ctx.user.id, creatorProvisional });
       await db.logActivity({ serviceId: id, userId: ctx.user.id, action: "service_created", details: `Service "${input.name}" créé` });
       return { id, code };
     }),
@@ -444,6 +456,7 @@ export const appRouter = router({
       const patient = await requirePatientAccess(input.id, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "patient.discharge");
       await requireConfirmedServiceRole(patient.serviceId, ctx.user.id);
+      await requireVerifiedServiceRole(patient.serviceId, ctx.user.id);
       if (patient.actualDischarge) throw new TRPCError({ code: "CONFLICT", message: "Ce patient a déjà quitté le service" });
       await db.updatePatient(input.id, {
         actualDischarge: new Date().toISOString(),
@@ -463,6 +476,7 @@ export const appRouter = router({
       const patient = await requirePatientAccess(input.id, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "patient.discharge");
       await requireConfirmedServiceRole(patient.serviceId, ctx.user.id);
+      await requireVerifiedServiceRole(patient.serviceId, ctx.user.id);
       if (patient.actualDischarge) throw new TRPCError({ code: "CONFLICT", message: "Ce patient a déjà quitté le service" });
       const referralDate = new Date();
       await db.updatePatient(input.id, {
@@ -692,6 +706,7 @@ export const appRouter = router({
       await requireServiceMember(consultation.serviceId, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "patient.discharge");
       await requireConfirmedServiceRole(consultation.serviceId, ctx.user.id);
+      await requireVerifiedServiceRole(consultation.serviceId, ctx.user.id);
       if (consultation.disposition || consultation.linkedPatientId) {
         throw new TRPCError({ code: "CONFLICT", message: "Une orientation a déjà été enregistrée pour cette consultation" });
       }
@@ -718,6 +733,7 @@ export const appRouter = router({
       await requireServiceMember(consultation.serviceId, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "patient.discharge");
       await requireConfirmedServiceRole(consultation.serviceId, ctx.user.id);
+      await requireVerifiedServiceRole(consultation.serviceId, ctx.user.id);
       if (consultation.disposition || consultation.linkedPatientId) {
         throw new TRPCError({ code: "CONFLICT", message: "Une orientation a déjà été enregistrée pour cette consultation" });
       }
@@ -863,6 +879,7 @@ export const appRouter = router({
       await requireServiceMember(proposal.serviceId, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "decision.review");
       await requireConfirmedServiceRole(proposal.serviceId, ctx.user.id);
+      await requireVerifiedServiceRole(proposal.serviceId, ctx.user.id);
       if (proposal.status !== "pending") throw new TRPCError({ code: "CONFLICT", message: "Cette proposition a déjà été traitée" });
       if (!input.approved && !input.reviewNote?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Une explication est obligatoire pour refuser la proposition" });
       if (proposal.assignedReviewerId && proposal.assignedReviewerId !== ctx.user.id) {
@@ -1129,10 +1146,30 @@ export const appRouter = router({
 
   // Système de codes de service
   membership: router({
-    join: protectedProcedure.input(z.object({ code: z.string().min(4) })).mutation(async ({ ctx, input }) => {
+    join: protectedProcedure.input(z.object({
+      code: z.string().min(4).optional(),
+      invitationToken: z.string().min(20).optional(),
+    }).refine(value => Boolean(value.code || value.invitationToken), { message: "Code ou invitation obligatoire" })).mutation(async ({ ctx, input }) => {
       await requireHallPlan(ctx.user.id);
-      const service = await db.getServiceByCode(input.code);
-      if (!service) throw new Error("Code invalide");
+      if (input.invitationToken) {
+        const invitation = await db.getServiceInvitation(hashInvitationToken(input.invitationToken));
+        if (!invitation || invitation.revokedAt || invitation.expiresAt <= new Date() || invitation.usedCount >= invitation.maxUses) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cette invitation est invalide, expirée ou a atteint sa limite" });
+        }
+        const service = await db.getServiceById(invitation.serviceId);
+        if (!service) throw new TRPCError({ code: "NOT_FOUND", message: "Service introuvable" });
+        const canJoinImmediately = canJoinImmediatelyWithInvitation(ctx.user.medicalRole);
+        const provisional = !(ctx.user.medicalRoleVerified && ctx.user.hospitalId === service.hospitalId);
+        const result = await db.joinService(service.id, ctx.user.id, {
+          autoApprove: canJoinImmediately,
+          medicalRole: ctx.user.medicalRole,
+          provisional,
+        });
+        if (result.status === "joined") await db.recordServiceInvitationUse(invitation.id, invitation.usedCount);
+        return result;
+      }
+      const service = await db.getServiceByCode(input.code!);
+      if (!service) throw new TRPCError({ code: "BAD_REQUEST", message: "Code invalide" });
       const autoJoin = canAutoJoinService(
         ctx.user.medicalRole,
         ctx.user.medicalRoleVerified,
@@ -1144,6 +1181,20 @@ export const appRouter = router({
         medicalRole: ctx.user.medicalRole,
       });
     }),
+    createInvitation: protectedProcedure.input(z.object({ serviceId: z.number() })).mutation(async ({ ctx, input }) => {
+      await requireServiceChef(input.serviceId, ctx.user.id);
+      const token = nanoid(32);
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+      await db.createServiceInvitation({
+        serviceId: input.serviceId,
+        tokenHash: hashInvitationToken(token),
+        createdById: ctx.user.id,
+        expiresAt,
+        maxUses: 20,
+      });
+      await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "service_invitation_created", details: "Invitation sécurisée valable 72 heures" });
+      return { token, expiresAt, maxUses: 20 };
+    }),
     pendingRequests: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       await requireServiceChef(input.serviceId, ctx.user.id);
       return db.getPendingRequests(input.serviceId);
@@ -1152,7 +1203,9 @@ export const appRouter = router({
       const request = await db.getJoinRequestById(input.requestId);
       if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Demande introuvable" });
       await requireServiceChef(request.serviceId, ctx.user.id);
-      return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id);
+      const coordinatorMembership = await db.getServiceMembership(request.serviceId, ctx.user.id);
+      const canVerifyMedicalRole = Boolean(ctx.user.medicalRoleVerified && coordinatorMembership && !coordinatorMembership.provisional);
+      return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id, canVerifyMedicalRole);
     }),
     isChef: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       const members = await db.getServiceMembers(input.serviceId);
@@ -1161,6 +1214,10 @@ export const appRouter = router({
     myRole: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
       return db.getServiceMemberRole(input.serviceId, ctx.user.id);
+    }),
+    myMembership: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireServiceMember(input.serviceId, ctx.user.id);
+      return db.getServiceMembership(input.serviceId, ctx.user.id);
     }),
   }),
 

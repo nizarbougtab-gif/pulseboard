@@ -108,7 +108,7 @@ export default function Profile() {
                   <SelectItem value="medecin">Médecin</SelectItem>
                 </SelectContent>
               </Select>
-              {(user as any)?.medicalRoleVerified && <p className="text-xs text-[var(--pulseboard-green)]">✓ Rôle confirmé par un chef de service — modification verrouillée</p>}
+              {(user as any)?.medicalRoleVerified && <p className="text-xs text-[var(--pulseboard-green)]">✓ Rôle médical confirmé — modification verrouillée</p>}
             </div>
 
             <div className="space-y-2">

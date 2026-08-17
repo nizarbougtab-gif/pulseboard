@@ -56,8 +56,8 @@ export default function PatientView() {
 
   const { data: patient, isLoading } = trpc.patients.get.useQuery({ id: patientId }, { enabled: patientId > 0 });
   const patientServiceId = patient?.serviceId ?? 0;
-  const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId: patientServiceId }, { enabled: patientServiceId > 0 });
-  const canApplyDecision = can("patient.discharge") && memberRole !== undefined && memberRole !== "stagiaire";
+  const { data: membership } = trpc.membership.myMembership.useQuery({ serviceId: patientServiceId }, { enabled: patientServiceId > 0 });
+  const canApplyDecision = can("patient.discharge") && membership?.role !== undefined && membership.role !== "stagiaire" && !membership.provisional;
   const { data: service } = trpc.services.get.useQuery({ id: patientServiceId }, { enabled: patientServiceId > 0 });
   const { data: servicePatients = [] } = trpc.patients.list.useQuery(
     { serviceId: patientServiceId, filter: "tous" },

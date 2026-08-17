@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, hospitals, services, serviceMembers, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 import { patientInitials } from "../shared/patientIdentity";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
@@ -244,11 +244,12 @@ function generateServiceCode(): string {
   return code;
 }
 
-export async function createService(data: { name: string; specialty: string; hospitalId: number; createdById: number; totalBeds?: number; description?: string }) {
+export async function createService(data: { name: string; specialty: string; hospitalId: number; createdById: number; totalBeds?: number; description?: string; creatorProvisional?: boolean }) {
   const db = getDb();
   const code = generateServiceCode();
-  const [{ id }] = await db.insert(services).values({ ...data, code }).returning({ id: services.id });
-  await db.insert(serviceMembers).values({ serviceId: id, userId: data.createdById, role: "chef" });
+  const { creatorProvisional, ...serviceData } = data;
+  const [{ id }] = await db.insert(services).values({ ...serviceData, code }).returning({ id: services.id });
+  await db.insert(serviceMembers).values({ serviceId: id, userId: data.createdById, role: "chef", provisional: creatorProvisional ?? false });
   return { id, code };
 }
 
@@ -275,24 +276,46 @@ export async function isServiceChef(serviceId: number, userId: number) {
 export async function joinService(
   serviceId: number,
   userId: number,
-  options?: { autoApprove?: boolean; medicalRole?: "externe" | "interne" | "resident" | "medecin" | null },
+  options?: { autoApprove?: boolean; medicalRole?: "externe" | "interne" | "resident" | "medecin" | null; provisional?: boolean },
 ) {
   const db = getDb();
   const alreadyMember = await isServiceMember(serviceId, userId);
-  if (alreadyMember) return { status: "already_member" };
+  if (alreadyMember) return { status: "already_member", provisional: false };
   const [existing] = await db.select().from(joinRequests).where(and(eq(joinRequests.serviceId, serviceId), eq(joinRequests.userId, userId)));
   if (options?.autoApprove) {
     const memberRole = options.medicalRole === "medecin" || options.medicalRole === "resident" ? "senior" : "junior";
-    await db.insert(serviceMembers).values({ serviceId, userId, role: memberRole });
+    await db.insert(serviceMembers).values({ serviceId, userId, role: memberRole, provisional: options.provisional ?? false });
     if (existing) {
       await db.update(joinRequests).set({ status: "approved", resolvedAt: new Date(), resolvedById: userId }).where(eq(joinRequests.id, existing.id));
     }
-    await logActivity({ serviceId, userId, action: "member_auto_joined", details: "Accès automatique : rôle déjà confirmé dans le même hôpital" });
-    return { status: "joined" };
+    await logActivity({
+      serviceId,
+      userId,
+      action: options.provisional ? "member_provisional_joined" : "member_auto_joined",
+      details: options.provisional ? "Accès provisoire par invitation sécurisée" : "Accès automatique : rôle déjà confirmé dans le même hôpital",
+    });
+    return { status: "joined", provisional: options.provisional ?? false };
   }
-  if (existing) return { status: "pending" };
+  if (existing) return { status: "pending", provisional: false };
   await db.insert(joinRequests).values({ serviceId, userId });
-  return { status: "pending" };
+  return { status: "pending", provisional: false };
+}
+
+export async function createServiceInvitation(data: { serviceId: number; tokenHash: string; createdById: number; expiresAt: Date; maxUses?: number }) {
+  const db = getDb();
+  const [invitation] = await db.insert(serviceInvitations).values(data).returning();
+  return invitation;
+}
+
+export async function getServiceInvitation(tokenHash: string) {
+  const db = getDb();
+  const [invitation] = await db.select().from(serviceInvitations).where(eq(serviceInvitations.tokenHash, tokenHash));
+  return invitation ?? null;
+}
+
+export async function recordServiceInvitationUse(invitationId: number, usedCount: number) {
+  const db = getDb();
+  await db.update(serviceInvitations).set({ usedCount: usedCount + 1 }).where(eq(serviceInvitations.id, invitationId));
 }
 
 export async function getPendingRequests(serviceId: number) {
@@ -315,7 +338,7 @@ export async function getJoinRequestById(requestId: number) {
   return request ?? null;
 }
 
-export async function resolveJoinRequest(requestId: number, approved: boolean, resolvedById: number) {
+export async function resolveJoinRequest(requestId: number, approved: boolean, resolvedById: number, verifyMedicalRole = false) {
   const db = getDb();
   const [req] = await db.select().from(joinRequests).where(eq(joinRequests.id, requestId));
   if (!req) return;
@@ -327,13 +350,20 @@ export async function resolveJoinRequest(requestId: number, approved: boolean, r
       : memberUser?.medicalRole === "externe"
         ? "stagiaire"
         : "junior";
-    await db.insert(serviceMembers).values({ serviceId: req.serviceId, userId: req.userId, role: memberRole });
-    await db.update(users).set({
-      medicalRoleVerified: true,
-      medicalRoleVerifiedById: resolvedById,
-      medicalRoleVerifiedAt: new Date(),
-      updatedAt: new Date(),
-    }).where(eq(users.id, req.userId));
+    await db.insert(serviceMembers).values({
+      serviceId: req.serviceId,
+      userId: req.userId,
+      role: memberRole,
+      provisional: memberRole !== "stagiaire" && !verifyMedicalRole,
+    });
+    if (verifyMedicalRole) {
+      await db.update(users).set({
+        medicalRoleVerified: true,
+        medicalRoleVerifiedById: resolvedById,
+        medicalRoleVerifiedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(users.id, req.userId));
+    }
     await logActivity({ serviceId: req.serviceId, userId: req.userId, action: "member_joined", details: null as any });
   }
 }
@@ -457,6 +487,14 @@ export async function getServiceMemberRole(serviceId: number, userId: number) {
   const [membership] = await db.select({ role: serviceMembers.role }).from(serviceMembers)
     .where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.userId, userId)));
   return membership?.role ?? null;
+}
+
+export async function getServiceMembership(serviceId: number, userId: number) {
+  const db = getDb();
+  const [membership] = await db.select({ role: serviceMembers.role, provisional: serviceMembers.provisional })
+    .from(serviceMembers)
+    .where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.userId, userId)));
+  return membership ?? null;
 }
 
 export async function resolvePatientAlerts(patientId: number, type: "dps_missing" | "no_bed" | "task_overdue" | "critical_patient", userId: number) {
@@ -666,6 +704,7 @@ export async function getServiceMembers(serviceId: number) {
     id: serviceMembers.id,
     userId: serviceMembers.userId,
     role: serviceMembers.role,
+    provisional: serviceMembers.provisional,
     joinedAt: serviceMembers.joinedAt,
     userName: users.name,
     medicalRole: users.medicalRole,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAutoJoinService, canDo } from "../shared/permissions";
+import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation } from "../shared/permissions";
 
 describe("clinical permissions", () => {
   it("allows an extern to document and propose without applying a discharge", () => {
@@ -37,5 +37,13 @@ describe("clinical permissions", () => {
     expect(canAutoJoinService("externe", true, 1, 1)).toBe(false);
     expect(canAutoJoinService("resident", false, 1, 1)).toBe(false);
     expect(canAutoJoinService("resident", true, 2, 1)).toBe(false);
+  });
+
+  it("lets clinicians use a secure invitation while students still require approval", () => {
+    expect(canJoinImmediatelyWithInvitation("interne")).toBe(true);
+    expect(canJoinImmediatelyWithInvitation("resident")).toBe(true);
+    expect(canJoinImmediatelyWithInvitation("medecin")).toBe(true);
+    expect(canJoinImmediatelyWithInvitation("externe")).toBe(false);
+    expect(canJoinImmediatelyWithInvitation(null)).toBe(false);
   });
 });
