@@ -75,6 +75,32 @@ export const securityEvents = pgTable("security_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const medicalRoleChangeRequests = pgTable("medical_role_change_requests", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  currentRole: text("currentRole").$type<"externe" | "interne" | "resident" | "medecin">().notNull(),
+  requestedRole: text("requestedRole").$type<"externe" | "interne" | "resident" | "medecin">().notNull(),
+  reason: text("reason").notNull(),
+  status: text("requestStatus").$type<"pending" | "approved" | "rejected" | "canceled">().default("pending").notNull(),
+  resolvedById: integer("resolvedById"),
+  resolutionNote: text("resolutionNote"),
+  resolvedAt: timestamp("resolvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const medicalRoleReviews = pgTable("medical_role_reviews", {
+  id: serial("id").primaryKey(),
+  targetUserId: integer("targetUserId").notNull(),
+  reviewerId: integer("reviewerId").notNull(),
+  serviceId: integer("serviceId").notNull(),
+  requestId: integer("requestId"),
+  kind: text("reviewKind").$type<"initial_verification" | "role_change">().notNull(),
+  decision: text("reviewDecision").$type<"approved" | "rejected">().notNull(),
+  reviewerMedicalRole: text("reviewerMedicalRole").$type<"resident" | "medecin">().notNull(),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const hospitals = pgTable("hospitals", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation } from "../shared/permissions";
+import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation, canReviewMedicalRole, medicalRoleReviewApproved } from "../shared/permissions";
 
 describe("clinical permissions", () => {
   it("allows an extern to document and propose without applying a discharge", () => {
@@ -45,5 +45,16 @@ describe("clinical permissions", () => {
     expect(canJoinImmediatelyWithInvitation("medecin")).toBe(true);
     expect(canJoinImmediatelyWithInvitation("externe")).toBe(false);
     expect(canJoinImmediatelyWithInvitation(null)).toBe(false);
+  });
+
+  it("requires a verified physician or two verified residents to confirm a medical role", () => {
+    expect(canReviewMedicalRole("medecin", true, false)).toBe(true);
+    expect(canReviewMedicalRole("resident", true, false)).toBe(true);
+    expect(canReviewMedicalRole("resident", false, false)).toBe(false);
+    expect(canReviewMedicalRole("resident", true, true)).toBe(false);
+    expect(canReviewMedicalRole("interne", true, false)).toBe(false);
+    expect(medicalRoleReviewApproved(["medecin"])).toBe(true);
+    expect(medicalRoleReviewApproved(["resident"])).toBe(false);
+    expect(medicalRoleReviewApproved(["resident", "resident"])).toBe(true);
   });
 });

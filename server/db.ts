@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 import { patientInitials } from "../shared/patientIdentity";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
@@ -727,6 +727,148 @@ export async function leaveService(serviceId: number, userId: number) {
 export async function updateUserProfile(userId: number, data: { medicalRole?: "externe" | "interne" | "resident" | "medecin"; hospitalId?: number; name?: string }) {
   const db = getDb();
   await db.update(users).set({ ...data, updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+type MedicalRole = "externe" | "interne" | "resident" | "medecin";
+
+export async function getPendingMedicalRoleChangeRequest(userId: number) {
+  const db = getDb();
+  const [request] = await db.select().from(medicalRoleChangeRequests)
+    .where(and(eq(medicalRoleChangeRequests.userId, userId), eq(medicalRoleChangeRequests.status, "pending")))
+    .orderBy(desc(medicalRoleChangeRequests.createdAt));
+  return request ?? null;
+}
+
+export async function getMedicalRoleChangeRequest(requestId: number) {
+  const db = getDb();
+  const [request] = await db.select().from(medicalRoleChangeRequests).where(eq(medicalRoleChangeRequests.id, requestId));
+  return request ?? null;
+}
+
+export async function createMedicalRoleChangeRequest(data: { userId: number; currentRole: MedicalRole; requestedRole: MedicalRole; reason: string }) {
+  const db = getDb();
+  const [request] = await db.insert(medicalRoleChangeRequests).values(data).returning();
+  return request;
+}
+
+export async function cancelMedicalRoleChangeRequest(requestId: number, userId: number) {
+  const db = getDb();
+  await db.update(medicalRoleChangeRequests).set({ status: "canceled", resolvedAt: new Date() })
+    .where(and(eq(medicalRoleChangeRequests.id, requestId), eq(medicalRoleChangeRequests.userId, userId), eq(medicalRoleChangeRequests.status, "pending")));
+}
+
+export async function getMedicalRoleChangeHistory(userId: number) {
+  const db = getDb();
+  return db.select().from(medicalRoleChangeRequests)
+    .where(eq(medicalRoleChangeRequests.userId, userId))
+    .orderBy(desc(medicalRoleChangeRequests.createdAt));
+}
+
+export async function getPendingMedicalRoleChangesForService(serviceId: number) {
+  const db = getDb();
+  const memberRows = await db.select({ userId: serviceMembers.userId }).from(serviceMembers).where(eq(serviceMembers.serviceId, serviceId));
+  const userIds = memberRows.map(member => member.userId);
+  if (!userIds.length) return [];
+  return db.select({
+    id: medicalRoleChangeRequests.id,
+    userId: medicalRoleChangeRequests.userId,
+    userName: users.name,
+    currentRole: medicalRoleChangeRequests.currentRole,
+    requestedRole: medicalRoleChangeRequests.requestedRole,
+    reason: medicalRoleChangeRequests.reason,
+    createdAt: medicalRoleChangeRequests.createdAt,
+  }).from(medicalRoleChangeRequests)
+    .leftJoin(users, eq(medicalRoleChangeRequests.userId, users.id))
+    .where(and(inArray(medicalRoleChangeRequests.userId, userIds), eq(medicalRoleChangeRequests.status, "pending")))
+    .orderBy(asc(medicalRoleChangeRequests.createdAt));
+}
+
+export async function getProvisionalMedicalRoleMembers(serviceId: number) {
+  const db = getDb();
+  return db.select({
+    userId: serviceMembers.userId,
+    userName: users.name,
+    medicalRole: users.medicalRole,
+    joinedAt: serviceMembers.joinedAt,
+  }).from(serviceMembers)
+    .leftJoin(users, eq(serviceMembers.userId, users.id))
+    .where(and(eq(serviceMembers.serviceId, serviceId), eq(serviceMembers.provisional, true)));
+}
+
+export async function getMedicalRoleReview(data: { targetUserId: number; reviewerId: number; serviceId: number; kind: "initial_verification" | "role_change"; requestId?: number }) {
+  const db = getDb();
+  const conditions = [
+    eq(medicalRoleReviews.targetUserId, data.targetUserId),
+    eq(medicalRoleReviews.reviewerId, data.reviewerId),
+    eq(medicalRoleReviews.serviceId, data.serviceId),
+    eq(medicalRoleReviews.kind, data.kind),
+    data.requestId ? eq(medicalRoleReviews.requestId, data.requestId) : isNull(medicalRoleReviews.requestId),
+  ];
+  const [review] = await db.select().from(medicalRoleReviews).where(and(...conditions));
+  return review ?? null;
+}
+
+export async function createMedicalRoleReview(data: {
+  targetUserId: number;
+  reviewerId: number;
+  serviceId: number;
+  requestId?: number;
+  kind: "initial_verification" | "role_change";
+  decision: "approved" | "rejected";
+  reviewerMedicalRole: "resident" | "medecin";
+  note?: string;
+}) {
+  const db = getDb();
+  const [review] = await db.insert(medicalRoleReviews).values(data).returning();
+  return review;
+}
+
+export async function getMedicalRoleReviews(targetUserId: number, serviceId: number, kind: "initial_verification" | "role_change", requestId?: number) {
+  const db = getDb();
+  return db.select().from(medicalRoleReviews).where(and(
+    eq(medicalRoleReviews.targetUserId, targetUserId),
+    eq(medicalRoleReviews.serviceId, serviceId),
+    eq(medicalRoleReviews.kind, kind),
+    requestId ? eq(medicalRoleReviews.requestId, requestId) : isNull(medicalRoleReviews.requestId),
+  ));
+}
+
+export async function confirmMedicalRole(userId: number, verifierId: number, serviceId: number) {
+  const db = getDb();
+  await db.update(users).set({
+    medicalRoleVerified: true,
+    medicalRoleVerifiedById: verifierId,
+    medicalRoleVerifiedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId));
+  await db.update(serviceMembers).set({ provisional: false })
+    .where(and(eq(serviceMembers.userId, userId), eq(serviceMembers.serviceId, serviceId)));
+}
+
+export async function resolveMedicalRoleChange(requestId: number, reviewerId: number, approved: boolean, resolutionNote?: string) {
+  const db = getDb();
+  const request = await getMedicalRoleChangeRequest(requestId);
+  if (!request || request.status !== "pending") return false;
+  await db.update(medicalRoleChangeRequests).set({
+    status: approved ? "approved" : "rejected",
+    resolvedById: reviewerId,
+    resolutionNote: resolutionNote || null,
+    resolvedAt: new Date(),
+  }).where(eq(medicalRoleChangeRequests.id, requestId));
+  if (approved) {
+    const memberRole = request.requestedRole === "medecin" || request.requestedRole === "resident"
+      ? "senior"
+      : request.requestedRole === "externe" ? "stagiaire" : "junior";
+    await db.update(users).set({
+      medicalRole: request.requestedRole,
+      medicalRoleVerified: true,
+      medicalRoleVerifiedById: reviewerId,
+      medicalRoleVerifiedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(users.id, request.userId));
+    await db.update(serviceMembers).set({ role: memberRole, provisional: false }).where(eq(serviceMembers.userId, request.userId));
+  }
+  return true;
 }
 
 // ===== CONSULTATIONS =====

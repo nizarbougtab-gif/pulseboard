@@ -4,10 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
-import { ArrowLeft, User, Building2, Stethoscope, Save, Download, CreditCard, Trash2, LogOut } from "lucide-react";
+import { ArrowLeft, User, Building2, Stethoscope, Save, Download, CreditCard, Trash2, LogOut, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -22,6 +25,11 @@ export default function Profile() {
   const [name, setName] = useState("");
   const [medicalRole, setMedicalRole] = useState<string>("");
   const [hospitalId, setHospitalId] = useState<string>("");
+  const [showRoleRequest, setShowRoleRequest] = useState(false);
+  const [requestedRole, setRequestedRole] = useState<string>("");
+  const [roleReason, setRoleReason] = useState("");
+  const utils = trpc.useUtils();
+  const { data: roleStatus } = trpc.profile.roleStatus.useQuery();
 
   const updateProfile = trpc.profile.update.useMutation({
     onSuccess: () => {
@@ -45,6 +53,20 @@ export default function Profile() {
     onError: error => toast.error(error.message),
   });
   const deletion = trpc.account.requestDeletion.useMutation({ onSuccess: data => toast.success(data.message), onError: error => toast.error(error.message) });
+  const requestRoleChange = trpc.profile.requestRoleChange.useMutation({
+    onSuccess: () => {
+      utils.profile.roleStatus.invalidate();
+      setShowRoleRequest(false);
+      setRequestedRole("");
+      setRoleReason("");
+      toast.success("Demande envoyée aux membres vérifiés de votre Hall");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const cancelRoleChange = trpc.profile.cancelRoleChange.useMutation({
+    onSuccess: () => { utils.profile.roleStatus.invalidate(); toast.success("Demande annulée"); },
+    onError: error => toast.error(error.message),
+  });
 
   useEffect(() => {
     if (user) {
@@ -65,7 +87,6 @@ export default function Profile() {
   const handleSave = () => {
     updateProfile.mutate({
       name: name || undefined,
-      medicalRole: medicalRole as any || undefined,
       hospitalId: hospitalId ? parseInt(hospitalId) : undefined,
     });
   };
@@ -99,7 +120,7 @@ export default function Profile() {
               <Label className="flex items-center gap-2">
                 <Stethoscope className="w-4 h-4" /> Rôle médical
               </Label>
-              <Select value={medicalRole} onValueChange={setMedicalRole} disabled={Boolean((user as any)?.medicalRoleVerified)}>
+              <Select value={medicalRole} disabled>
                 <SelectTrigger><SelectValue placeholder="Choisir un rôle" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="externe">Étudiant / Externe (6e–8e année)</SelectItem>
@@ -108,7 +129,26 @@ export default function Profile() {
                   <SelectItem value="medecin">Médecin</SelectItem>
                 </SelectContent>
               </Select>
-              {(user as any)?.medicalRoleVerified && <p className="text-xs text-[var(--pulseboard-green)]">✓ Rôle médical confirmé — modification verrouillée</p>}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-xs text-muted-foreground">
+                  {(user as any)?.medicalRoleVerified ? "✓ Rôle médical confirmé et verrouillé" : "Rôle déclaré verrouillé · accès provisoire jusqu’à confirmation"}
+                </p>
+                {!roleStatus?.pendingRequest && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setShowRoleRequest(true)}>
+                    Demander un changement
+                  </Button>
+                )}
+              </div>
+              {roleStatus?.pendingRequest && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Demande en attente : {roleStatus.pendingRequest.currentRole} → {roleStatus.pendingRequest.requestedRole}</span>
+                    <Badge variant="outline">En validation</Badge>
+                  </div>
+                  <p className="text-xs mt-1">Un médecin vérifié ou deux résidents vérifiés doivent confirmer.</p>
+                  <Button type="button" size="sm" variant="ghost" className="mt-1" disabled={cancelRoleChange.isPending} onClick={() => cancelRoleChange.mutate({ requestId: roleStatus.pendingRequest!.id })}>Annuler la demande</Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -145,7 +185,44 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+        {roleStatus?.history && roleStatus.history.length > 0 && (
+          <Card className="mt-5">
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="w-4 h-4" />Historique du rôle</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {roleStatus.history.slice(0, 5).map(request => (
+                <div key={request.id} className="text-sm border-b last:border-0 pb-2 last:pb-0">
+                  <span className="font-medium">{request.currentRole} → {request.requestedRole}</span>
+                  <span className="text-muted-foreground"> · {request.status === "pending" ? "En attente" : request.status === "approved" ? "Approuvée" : request.status === "rejected" ? "Refusée" : "Annulée"}</span>
+                  <p className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleString("fr-FR")}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </main>
+
+      <Dialog open={showRoleRequest} onOpenChange={setShowRoleRequest}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Demander un changement de rôle</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Cette demande sera tracée. Vous ne pouvez pas la valider vous-même.</p>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nouveau rôle</Label>
+              <Select value={requestedRole} onValueChange={setRequestedRole}>
+                <SelectTrigger><SelectValue placeholder="Choisir le nouveau rôle" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="externe">Étudiant / Externe</SelectItem>
+                  <SelectItem value="interne">Interne</SelectItem>
+                  <SelectItem value="resident">Résident</SelectItem>
+                  <SelectItem value="medecin">Médecin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2"><Label>Motif ou justificatif</Label><Textarea value={roleReason} onChange={event => setRoleReason(event.target.value)} placeholder="Exemple : passage au statut de résident à compter du..." /></div>
+          </div>
+          <DialogFooter><Button variant="ghost" onClick={() => setShowRoleRequest(false)}>Annuler</Button><Button disabled={!requestedRole || roleReason.trim().length < 10 || requestRoleChange.isPending} onClick={() => requestRoleChange.mutate({ requestedRole: requestedRole as any, reason: roleReason.trim() })}>Envoyer la demande</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
