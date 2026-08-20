@@ -9,7 +9,7 @@ import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation, type Permission } from "../shared/permissions";
+import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation, canReviewMedicalRole, medicalRoleReviewApproved, type Permission } from "../shared/permissions";
 import { patientInitials, sanitizePatientInitial } from "../shared/patientIdentity";
 import { createHash } from "node:crypto";
 
@@ -82,6 +82,18 @@ async function requireVerifiedServiceRole(serviceId: number, userId: number) {
       message: "Votre accès au Hall est provisoire : proposez cette décision à un membre vérifié pour validation",
     });
   }
+}
+
+async function requireMedicalRoleReviewer(serviceId: number, user: { id: number; medicalRole: string | null; medicalRoleVerified: boolean; hospitalId: number | null }) {
+  const membership = await db.getServiceMembership(serviceId, user.id);
+  if (!membership || !canReviewMedicalRole(user.medicalRole as any, user.medicalRoleVerified, membership.provisional)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "La confirmation d’un rôle nécessite un médecin vérifié ou un résident vérifié non provisoire" });
+  }
+  const service = await db.getServiceById(serviceId);
+  if (!service || !user.hospitalId || user.hospitalId !== service.hospitalId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "La validation doit être réalisée dans le même hôpital" });
+  }
+  return membership;
 }
 
 const hashAccountToken = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -273,13 +285,80 @@ export const appRouter = router({
       name: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       if (input.medicalRole && input.medicalRole !== ctx.user.medicalRole) {
-        const alreadyInService = await db.userHasServiceMembership(ctx.user.id);
-        if (ctx.user.medicalRoleVerified || alreadyInService) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Votre rôle médical a été confirmé par un service et ne peut plus être modifié librement" });
-        }
+        throw new TRPCError({ code: "FORBIDDEN", message: "Le rôle médical est verrouillé. Utilisez la demande de changement de rôle." });
       }
-      await db.updateUserProfile(ctx.user.id, input);
+      const { medicalRole: _medicalRole, ...editableProfile } = input;
+      await db.updateUserProfile(ctx.user.id, editableProfile);
       return { success: true };
+    }),
+    roleStatus: protectedProcedure.query(async ({ ctx }) => ({
+      pendingRequest: await db.getPendingMedicalRoleChangeRequest(ctx.user.id),
+      history: await db.getMedicalRoleChangeHistory(ctx.user.id),
+    })),
+    requestRoleChange: protectedProcedure.input(z.object({
+      requestedRole: z.enum(["externe", "interne", "resident", "medecin"]),
+      reason: z.string().trim().min(10).max(1000),
+    })).mutation(async ({ ctx, input }) => {
+      if (!ctx.user.medicalRole) throw new TRPCError({ code: "BAD_REQUEST", message: "Votre rôle actuel est introuvable" });
+      if (input.requestedRole === ctx.user.medicalRole) throw new TRPCError({ code: "BAD_REQUEST", message: "Choisissez un rôle différent de votre rôle actuel" });
+      if (await db.getPendingMedicalRoleChangeRequest(ctx.user.id)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Une demande de changement est déjà en attente" });
+      }
+      const request = await db.createMedicalRoleChangeRequest({
+        userId: ctx.user.id,
+        currentRole: ctx.user.medicalRole,
+        requestedRole: input.requestedRole,
+        reason: input.reason,
+      });
+      await db.logSecurityEvent(ctx.user.id, "medical_role_change_requested", `${ctx.user.medicalRole} → ${input.requestedRole}`);
+      return request;
+    }),
+    cancelRoleChange: protectedProcedure.input(z.object({ requestId: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.cancelMedicalRoleChangeRequest(input.requestId, ctx.user.id);
+      await db.logSecurityEvent(ctx.user.id, "medical_role_change_canceled", `Demande #${input.requestId}`);
+      return { success: true };
+    }),
+    pendingRoleChanges: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireMedicalRoleReviewer(input.serviceId, ctx.user);
+      return db.getPendingMedicalRoleChangesForService(input.serviceId);
+    }),
+    reviewRoleChange: protectedProcedure.input(z.object({
+      serviceId: z.number(),
+      requestId: z.number(),
+      approved: z.boolean(),
+      note: z.string().trim().max(1000).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      await requireMedicalRoleReviewer(input.serviceId, ctx.user);
+      const request = await db.getMedicalRoleChangeRequest(input.requestId);
+      if (!request || request.status !== "pending") throw new TRPCError({ code: "NOT_FOUND", message: "Demande en attente introuvable" });
+      if (request.userId === ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez pas valider votre propre rôle" });
+      if (!(await db.isServiceMember(input.serviceId, request.userId))) throw new TRPCError({ code: "FORBIDDEN", message: "Cette personne n’appartient pas à ce Hall" });
+      if (request.requestedRole === "medecin" && ctx.user.medicalRole !== "medecin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Le passage au rôle médecin doit être confirmé par un médecin vérifié" });
+      }
+      if (!input.approved && !input.note?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Un motif est obligatoire pour refuser la demande" });
+      if (await db.getMedicalRoleReview({ targetUserId: request.userId, reviewerId: ctx.user.id, serviceId: input.serviceId, kind: "role_change", requestId: request.id })) {
+        throw new TRPCError({ code: "CONFLICT", message: "Vous avez déjà examiné cette demande" });
+      }
+      await db.createMedicalRoleReview({
+        targetUserId: request.userId,
+        reviewerId: ctx.user.id,
+        serviceId: input.serviceId,
+        requestId: request.id,
+        kind: "role_change",
+        decision: input.approved ? "approved" : "rejected",
+        reviewerMedicalRole: ctx.user.medicalRole as "resident" | "medecin",
+        note: input.note,
+      });
+      if (!input.approved) {
+        await db.resolveMedicalRoleChange(request.id, ctx.user.id, false, input.note);
+        return { status: "rejected", approvals: 0 };
+      }
+      const reviews = await db.getMedicalRoleReviews(request.userId, input.serviceId, "role_change", request.id);
+      const approved = medicalRoleReviewApproved(reviews.filter(review => review.decision === "approved").map(review => review.reviewerMedicalRole));
+      if (approved) await db.resolveMedicalRoleChange(request.id, ctx.user.id, true, input.note);
+      await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: approved ? "medical_role_change_approved" : "medical_role_change_reviewed", details: `Demande #${request.id} : ${request.currentRole} → ${request.requestedRole}` });
+      return { status: approved ? "approved" : "awaiting_second_review", approvals: reviews.filter(review => review.decision === "approved").length };
     }),
   }),
 
@@ -1195,6 +1274,45 @@ export const appRouter = router({
       await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "service_invitation_created", details: "Invitation sécurisée valable 72 heures" });
       return { token, expiresAt, maxUses: 20 };
     }),
+    provisionalMembers: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
+      await requireMedicalRoleReviewer(input.serviceId, ctx.user);
+      return db.getProvisionalMedicalRoleMembers(input.serviceId);
+    }),
+    verifyMedicalRole: protectedProcedure.input(z.object({
+      serviceId: z.number(),
+      targetUserId: z.number(),
+    })).mutation(async ({ ctx, input }) => {
+      await requireMedicalRoleReviewer(input.serviceId, ctx.user);
+      if (input.targetUserId === ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Vous ne pouvez pas confirmer votre propre rôle" });
+      const targetMembership = await db.getServiceMembership(input.serviceId, input.targetUserId);
+      const targetUser = await db.getUserById(input.targetUserId);
+      const service = await db.getServiceById(input.serviceId);
+      if (!targetMembership || !targetMembership.provisional || !targetUser || !service) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Membre provisoire introuvable" });
+      }
+      if (!targetUser.hospitalId || targetUser.hospitalId !== service.hospitalId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "L’établissement déclaré ne correspond pas à celui du Hall" });
+      }
+      if (targetUser.medicalRole === "medecin" && ctx.user.medicalRole !== "medecin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Le rôle médecin doit être confirmé par un autre médecin vérifié" });
+      }
+      if (await db.getMedicalRoleReview({ targetUserId: input.targetUserId, reviewerId: ctx.user.id, serviceId: input.serviceId, kind: "initial_verification" })) {
+        throw new TRPCError({ code: "CONFLICT", message: "Vous avez déjà confirmé ce rôle" });
+      }
+      await db.createMedicalRoleReview({
+        targetUserId: input.targetUserId,
+        reviewerId: ctx.user.id,
+        serviceId: input.serviceId,
+        kind: "initial_verification",
+        decision: "approved",
+        reviewerMedicalRole: ctx.user.medicalRole as "resident" | "medecin",
+      });
+      const reviews = await db.getMedicalRoleReviews(input.targetUserId, input.serviceId, "initial_verification");
+      const verified = medicalRoleReviewApproved(reviews.map(review => review.reviewerMedicalRole));
+      if (verified) await db.confirmMedicalRole(input.targetUserId, ctx.user.id, input.serviceId);
+      await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: verified ? "medical_role_verified" : "medical_role_reviewed", details: `${targetUser.name || `Utilisateur #${targetUser.id}`} · ${targetUser.medicalRole}` });
+      return { status: verified ? "verified" : "awaiting_second_review", approvals: reviews.length };
+    }),
     pendingRequests: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       await requireServiceChef(input.serviceId, ctx.user.id);
       return db.getPendingRequests(input.serviceId);
@@ -1203,9 +1321,7 @@ export const appRouter = router({
       const request = await db.getJoinRequestById(input.requestId);
       if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "Demande introuvable" });
       await requireServiceChef(request.serviceId, ctx.user.id);
-      const coordinatorMembership = await db.getServiceMembership(request.serviceId, ctx.user.id);
-      const canVerifyMedicalRole = Boolean(ctx.user.medicalRoleVerified && coordinatorMembership && !coordinatorMembership.provisional);
-      return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id, canVerifyMedicalRole);
+      return db.resolveJoinRequest(input.requestId, input.approved, ctx.user.id, false);
     }),
     isChef: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       const members = await db.getServiceMembers(input.serviceId);

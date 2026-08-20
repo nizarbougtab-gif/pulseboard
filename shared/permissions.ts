@@ -49,6 +49,18 @@ export function canJoinImmediatelyWithInvitation(role: MedicalRole | null | unde
   return Boolean(role && role !== "externe");
 }
 
+export function canReviewMedicalRole(
+  role: MedicalRole | null | undefined,
+  roleVerified: boolean,
+  provisionalMembership: boolean,
+): role is "resident" | "medecin" {
+  return Boolean(roleVerified && !provisionalMembership && (role === "resident" || role === "medecin"));
+}
+
+export function medicalRoleReviewApproved(reviewerRoles: Array<"resident" | "medecin">): boolean {
+  return reviewerRoles.includes("medecin") || reviewerRoles.filter(role => role === "resident").length >= 2;
+}
+
 export const ROLE_LABELS: Record<MedicalRole, string> = {
   externe: "Étudiant / Externe",
   interne: "Interne",

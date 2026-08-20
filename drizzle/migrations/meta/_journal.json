@@ -64,6 +64,13 @@
       "when": 1786924800000,
       "tag": "0008_secure_hall_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787184000000,
+      "tag": "0009_medical_role_governance",
+      "breakpoints": true
     }
   ]
 }

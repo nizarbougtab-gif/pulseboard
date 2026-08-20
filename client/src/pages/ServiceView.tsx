@@ -71,7 +71,10 @@ export default function ServiceView() {
   const { data: memberRole } = trpc.membership.myRole.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const { data: membership } = trpc.membership.myMembership.useQuery({ serviceId }, { enabled: serviceId > 0 });
   const hasConfirmedRole = memberRole !== undefined && memberRole !== "stagiaire";
+  const canReviewRoles = Boolean((user as any)?.medicalRoleVerified && membership && !membership.provisional && can("decision.review"));
   const { data: pendingRequests = [] } = trpc.membership.pendingRequests.useQuery({ serviceId }, { enabled: !!isChef });
+  const { data: provisionalMembers = [] } = trpc.membership.provisionalMembers.useQuery({ serviceId }, { enabled: serviceId > 0 && canReviewRoles });
+  const { data: pendingRoleChanges = [] } = trpc.profile.pendingRoleChanges.useQuery({ serviceId }, { enabled: serviceId > 0 && canReviewRoles });
   const { data: members = [] } = trpc.services.members.useQuery({ serviceId }, { enabled: serviceId > 0 && (activeTab === "garde" || showGuardDialog) });
   const { data: guards = [] } = trpc.guards.list.useQuery({ serviceId }, { enabled: serviceId > 0 && activeTab === "garde" });
 
@@ -83,6 +86,24 @@ export default function ServiceView() {
       setCodeCopied(true);
       setTimeout(() => setCodeCopied(false), 2000);
       toast.success(`Lien sécurisé copié — valable jusqu'au ${new Date(expiresAt).toLocaleString("fr-FR")}`);
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  const verifyMedicalRole = trpc.membership.verifyMedicalRole.useMutation({
+    onSuccess: result => {
+      utils.membership.provisionalMembers.invalidate({ serviceId });
+      utils.services.members.invalidate({ serviceId });
+      toast.success(result.status === "verified" ? "Rôle confirmé et accès provisoire levé" : "Première confirmation enregistrée · une seconde est nécessaire");
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  const reviewRoleChange = trpc.profile.reviewRoleChange.useMutation({
+    onSuccess: result => {
+      utils.profile.pendingRoleChanges.invalidate({ serviceId });
+      utils.membership.provisionalMembers.invalidate({ serviceId });
+      toast.success(result.status === "approved" ? "Changement de rôle approuvé" : result.status === "rejected" ? "Demande refusée et journalisée" : "Première validation enregistrée · une seconde est nécessaire");
     },
     onError: error => toast.error(error.message),
   });
@@ -323,6 +344,27 @@ export default function ServiceView() {
                     <button aria-label={`Refuser ${r.userName || "ce membre"}`} disabled={resolveRequest.isPending} onClick={() => resolveRequest.mutate({ requestId: r.id, approved: false })} className="text-[var(--pulseboard-red)] hover:opacity-70 disabled:opacity-50"><X className="w-4 h-4" /></button>
                   </div>
                 ))}
+              </div>
+            )}
+            {canReviewRoles && (provisionalMembers.length > 0 || pendingRoleChanges.length > 0) && (
+              <div className="mt-2 space-y-2 rounded-lg border border-border bg-background p-2.5 text-xs">
+                <p className="font-semibold flex items-center gap-1"><UserCheck className="w-3.5 h-3.5 text-[var(--pulseboard-green)]" />Validation des rôles médicaux</p>
+                {provisionalMembers.map(member => (
+                  <div key={`provisional-${member.userId}`} className="flex items-center gap-2 rounded-md bg-muted/50 px-2.5 py-2">
+                    <span className="flex-1"><strong>{member.userName || `Membre #${member.userId}`}</strong> · {ROLE_LABELS[member.medicalRole as keyof typeof ROLE_LABELS] || "Rôle non renseigné"}<span className="block text-muted-foreground">Accès provisoire · vérifiez l’identité avant de confirmer</span></span>
+                    <Button size="sm" variant="outline" disabled={verifyMedicalRole.isPending} onClick={() => verifyMedicalRole.mutate({ serviceId, targetUserId: member.userId })}>Confirmer</Button>
+                  </div>
+                ))}
+                {pendingRoleChanges.map(request => (
+                  <div key={`role-change-${request.id}`} className="rounded-md bg-muted/50 px-2.5 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1"><strong>{request.userName || `Membre #${request.userId}`}</strong> · {ROLE_LABELS[request.currentRole]} → {ROLE_LABELS[request.requestedRole]}<span className="block text-muted-foreground">{request.reason}</span></span>
+                      <Button size="sm" variant="outline" disabled={reviewRoleChange.isPending} onClick={() => { const note = window.prompt("Motif du refus (obligatoire) :"); if (note?.trim()) reviewRoleChange.mutate({ serviceId, requestId: request.id, approved: false, note: note.trim() }); }}>Refuser</Button>
+                      <Button size="sm" disabled={reviewRoleChange.isPending} onClick={() => reviewRoleChange.mutate({ serviceId, requestId: request.id, approved: true })}>Valider</Button>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-muted-foreground">Un médecin vérifié suffit ; deux validations distinctes sont nécessaires entre résidents.</p>
               </div>
             )}
           </div>

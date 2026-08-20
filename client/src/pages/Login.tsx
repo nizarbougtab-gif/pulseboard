@@ -118,6 +118,7 @@ export default function Login() {
                     e.preventDefault();
                     setRegError("");
                     if (!accepted) return setRegError("Vous devez accepter les conditions et la politique de confidentialité.");
+                    if (!window.confirm("Confirmez-vous ce rôle médical ? Il sera verrouillé après la création du compte. Toute correction devra être validée et restera tracée.")) return;
                     registerMutation.mutate({ name: regName, email: regEmail, password: regPassword, medicalRole: regRole, acceptTerms: true, acceptPrivacy: true });
                   }}
                   className="space-y-4"
@@ -175,6 +176,7 @@ export default function Login() {
                         <SelectItem value="medecin">Médecin / Chef de service</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">Ce choix sera verrouillé après l’inscription. Une correction nécessitera une demande validée.</p>
                   </div>
                   {regError && <p className="text-sm text-destructive">{regError}</p>}
                   <Button
