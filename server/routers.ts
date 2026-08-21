@@ -16,10 +16,38 @@ import { createHash } from "node:crypto";
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const FORBIDDEN_MESSAGE = "Vous n'avez pas accès à cette ressource";
 
-function normalizePatientInitial(value: string) {
-  const initial = sanitizePatientInitial(value);
-  if (!initial) throw new TRPCError({ code: "BAD_REQUEST", message: "Une initiale valide est obligatoire" });
-  return initial;
+function normalizePatientName(value: string) {
+  const name = value.trim().replace(/\s+/g, " ");
+  if (!name || name.length > 100) throw new TRPCError({ code: "BAD_REQUEST", message: "Un nom valide est obligatoire" });
+  return name;
+}
+
+function redactPatientForMembership<T extends Record<string, any>>(patient: T, membership: { role: string | null; provisional: boolean }) {
+  const studentView = !membership.role || membership.role === "stagiaire";
+  return {
+    ...patient,
+    firstName: studentView ? sanitizePatientInitial(patient.firstName ?? "") : patient.firstName,
+    lastName: studentView ? sanitizePatientInitial(patient.lastName ?? "") : patient.lastName,
+    dateOfBirth: studentView ? null : patient.dateOfBirth,
+    profession: studentView ? null : patient.profession,
+    address: null,
+    phone: null,
+    emergencyContact: null,
+  };
+}
+
+function redactConsultationForMembership<T extends Record<string, any>>(consultation: T, membership: { role: string | null; provisional: boolean }) {
+  const studentView = !membership.role || membership.role === "stagiaire";
+  return {
+    ...consultation,
+    patientFirstName: studentView ? sanitizePatientInitial(consultation.patientFirstName ?? "") : consultation.patientFirstName,
+    patientLastName: studentView ? sanitizePatientInitial(consultation.patientLastName ?? "") : consultation.patientLastName,
+    patientDateOfBirth: studentView ? null : consultation.patientDateOfBirth,
+    patientProfession: studentView ? null : consultation.patientProfession,
+    patientAddress: null,
+    patientPhone: null,
+    patientEmergencyContact: null,
+  };
 }
 
 async function makeSessionToken(openId: string, name: string) {
@@ -413,17 +441,42 @@ export const appRouter = router({
       filter: z.enum(["tous", "urgents", "sortie_prevue", "sortis"]).optional(),
     })).query(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
-      return db.getPatientsByService(input.serviceId, input.filter || "tous");
+      const membership = await db.getServiceMembership(input.serviceId, ctx.user.id);
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
+      const patients = await db.getPatientsByService(input.serviceId, input.filter || "tous");
+      return patients.map(patient => redactPatientForMembership(patient, membership));
     }),
     search: protectedProcedure.input(z.object({ query: z.string().trim().min(2).max(100) })).query(async ({ ctx, input }) => {
       const matches = await db.searchPatients(input.query);
-      const accessible = await Promise.all(matches.map(async patient =>
-        (await db.isServiceMember(patient.serviceId, ctx.user.id)) ? patient : null
-      ));
+      const accessible = await Promise.all(matches.map(async patient => {
+        const membership = await db.getServiceMembership(patient.serviceId, ctx.user.id);
+        return membership ? redactPatientForMembership(patient, membership) : null;
+      }));
       return accessible.filter((patient): patient is NonNullable<typeof patient> => patient !== null);
     }),
     get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
-      return requirePatientAccess(input.id, ctx.user.id);
+      const patient = await requirePatientAccess(input.id, ctx.user.id);
+      const membership = await db.getServiceMembership(patient.serviceId, ctx.user.id);
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
+      return redactPatientForMembership(patient, membership);
+    }),
+    civilIdentity: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
+      const patient = await requirePatientAccess(input.id, ctx.user.id);
+      const membership = await db.getServiceMembership(patient.serviceId, ctx.user.id);
+      if (!membership?.role || membership.role === "stagiaire") throw new TRPCError({ code: "FORBIDDEN", message: "État civil réservé aux professionnels du service" });
+      const restricted = membership.provisional;
+      await db.logActivity({ serviceId: patient.serviceId, patientId: patient.id, userId: ctx.user.id, action: "patient_civil_identity_accessed", details: restricted ? "Consultation restreinte de l'état civil" : "Fiche d'état civil consultée" });
+      return {
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        dateOfBirth: patient.dateOfBirth,
+        gender: patient.gender,
+        profession: patient.profession,
+        address: restricted ? null : patient.address,
+        phone: restricted ? null : patient.phone,
+        emergencyContact: restricted ? null : patient.emergencyContact,
+        restricted,
+      };
     }),
     create: protectedProcedure.input(z.object({
       firstName: z.string().min(1),
@@ -437,6 +490,8 @@ export const appRouter = router({
       notes: z.string().optional(),
       dateOfBirth: z.string().optional(),
       gender: z.enum(["M", "F"]).optional(),
+      profession: z.string().max(150).optional(),
+      address: z.string().max(500).optional(),
       phone: z.string().optional(),
       emergencyContact: z.string().optional(),
       expectedDischarge: z.string().optional(),
@@ -447,8 +502,8 @@ export const appRouter = router({
       const { expectedDischarge, ...rest } = input;
       const id = await db.createPatient({
         ...rest,
-        firstName: normalizePatientInitial(rest.firstName),
-        lastName: normalizePatientInitial(rest.lastName),
+        firstName: normalizePatientName(rest.firstName),
+        lastName: normalizePatientName(rest.lastName),
         createdById: ctx.user.id,
         expectedDischarge: expectedDischarge || undefined,
       });
@@ -470,6 +525,12 @@ export const appRouter = router({
       allergies: z.string().optional(),
       antecedents: z.string().optional(),
       notes: z.string().optional(),
+      dateOfBirth: z.string().nullable().optional(),
+      gender: z.enum(["M", "F"]).nullable().optional(),
+      profession: z.string().max(150).nullable().optional(),
+      address: z.string().max(500).nullable().optional(),
+      phone: z.string().nullable().optional(),
+      emergencyContact: z.string().nullable().optional(),
       expectedDischarge: z.string().nullable().optional(),
       actualDischarge: z.string().nullable().optional(),
       dpsCompleted: z.boolean().optional(),
@@ -480,8 +541,8 @@ export const appRouter = router({
       await requireConfirmedServiceRole(patient.serviceId, ctx.user.id);
       const { id, expectedDischarge, actualDischarge, ...rest } = input;
       const updateData: any = { ...rest };
-      if (rest.firstName !== undefined) updateData.firstName = normalizePatientInitial(rest.firstName);
-      if (rest.lastName !== undefined) updateData.lastName = normalizePatientInitial(rest.lastName);
+      if (rest.firstName !== undefined) updateData.firstName = normalizePatientName(rest.firstName);
+      if (rest.lastName !== undefined) updateData.lastName = normalizePatientName(rest.lastName);
       if (expectedDischarge !== undefined) updateData.expectedDischarge = expectedDischarge || null;
       if (actualDischarge !== undefined) updateData.actualDischarge = actualDischarge || null;
       await db.updatePatient(id, updateData);
@@ -689,19 +750,28 @@ export const appRouter = router({
   consultations: router({
     list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
-      return db.getConsultationsByService(input.serviceId);
+      const membership = await db.getServiceMembership(input.serviceId, ctx.user.id);
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
+      const consultations = await db.getConsultationsByService(input.serviceId);
+      return consultations.map(consultation => redactConsultationForMembership(consultation, membership));
     }),
     create: protectedProcedure.input(z.object({
       serviceId: z.number(),
       patientFirstName: z.string().min(1),
       patientLastName: z.string().min(1),
+      patientDateOfBirth: z.string().optional(),
+      patientGender: z.enum(["M", "F"]).optional(),
+      patientProfession: z.string().max(150).optional(),
+      patientAddress: z.string().max(500).optional(),
+      patientPhone: z.string().max(50).optional(),
+      patientEmergencyContact: z.string().max(200).optional(),
       motif: z.string().min(1),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
       requirePermission(ctx.user.medicalRole, "consult.create");
-      const patientFirstName = normalizePatientInitial(input.patientFirstName);
-      const patientLastName = normalizePatientInitial(input.patientLastName);
+      const patientFirstName = normalizePatientName(input.patientFirstName);
+      const patientLastName = normalizePatientName(input.patientLastName);
       const id = await db.createConsultation({ ...input, patientFirstName, patientLastName, createdById: ctx.user.id });
       await db.logActivity({ serviceId: input.serviceId, userId: ctx.user.id, action: "consultation_created", details: `Consultation ajoutée : ${patientInitials(patientFirstName, patientLastName)}` });
       return { id };
@@ -755,6 +825,12 @@ export const appRouter = router({
         status: input.status,
         diagnosis: consultation.motif,
         notes: consultation.notes || consultation.rapport || undefined,
+        dateOfBirth: consultation.patientDateOfBirth || undefined,
+        gender: consultation.patientGender || undefined,
+        profession: consultation.patientProfession || undefined,
+        address: consultation.patientAddress || undefined,
+        phone: consultation.patientPhone || undefined,
+        emergencyContact: consultation.patientEmergencyContact || undefined,
       });
       await db.updateConsultationDetails(input.id, {
         disposition: "hospitalise",
@@ -837,7 +913,10 @@ export const appRouter = router({
       lastName: z.string(),
     })).query(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
-      return db.getConsultationHistory(input.serviceId, input.firstName, input.lastName);
+      const membership = await db.getServiceMembership(input.serviceId, ctx.user.id);
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
+      const history = await db.getConsultationHistory(input.serviceId, input.firstName, input.lastName);
+      return history.map(consultation => redactConsultationForMembership(consultation, membership));
     }),
   }),
 
@@ -845,7 +924,18 @@ export const appRouter = router({
   guards: router({
     list: protectedProcedure.input(z.object({ serviceId: z.number() })).query(async ({ ctx, input }) => {
       await requireServiceMember(input.serviceId, ctx.user.id);
-      return db.getGuardsByService(input.serviceId);
+      const membership = await db.getServiceMembership(input.serviceId, ctx.user.id);
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
+      const guards = await db.getGuardsByService(input.serviceId);
+      if (membership.role !== "stagiaire") return guards;
+      return guards.map(guard => ({
+        ...guard,
+        assignments: guard.assignments.map(assignment => ({
+          ...assignment,
+          patientFirstName: sanitizePatientInitial(assignment.patientFirstName ?? ""),
+          patientLastName: sanitizePatientInitial(assignment.patientLastName ?? ""),
+        })),
+      }));
     }),
     create: protectedProcedure.input(z.object({
       serviceId: z.number(), startsAt: z.string(), endsAt: z.string(),
@@ -996,6 +1086,12 @@ export const appRouter = router({
               serviceId: consultation.serviceId, createdById: ctx.user.id,
               bedNumber: proposal.bedNumber ?? undefined, status: proposal.patientStatus ?? "stable",
               diagnosis: consultation.motif, notes: consultation.notes || consultation.rapport || undefined,
+              dateOfBirth: consultation.patientDateOfBirth || undefined,
+              gender: consultation.patientGender || undefined,
+              profession: consultation.patientProfession || undefined,
+              address: consultation.patientAddress || undefined,
+              phone: consultation.patientPhone || undefined,
+              emergencyContact: consultation.patientEmergencyContact || undefined,
             });
             await db.updateConsultationDetails(consultation.id, { disposition: "hospitalise", linkedPatientId: patientId, status: "vu", closedAt: new Date() });
             if (!proposal.bedNumber) await db.createAlert({ serviceId: consultation.serviceId, patientId, type: "no_bed", message: `${patientInitials(consultation.patientFirstName, consultation.patientLastName)} n'a pas de lit assigné` });
@@ -1096,8 +1192,29 @@ export const appRouter = router({
       category: z.enum(["clinique", "infirmier", "evolution", "autre"]).optional(),
     })).mutation(async ({ ctx, input }) => {
       const patient = await requirePatientAccess(input.patientId, ctx.user.id);
+      requirePermission(ctx.user.medicalRole, "note.create");
       if (patient.serviceId !== input.serviceId) throw new TRPCError({ code: "BAD_REQUEST", message: "Service incohérent" });
       const id = await db.createObservation({ ...input, createdById: ctx.user.id });
+      await db.logActivity({ serviceId: input.serviceId, patientId: input.patientId, userId: ctx.user.id, action: "medical_observation_created", details: "Observation médicale ajoutée à l'hospitalisation" });
+      return { id };
+    }),
+    byConsultation: protectedProcedure.input(z.object({ consultationId: z.number() })).query(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.consultationId);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
+      return db.getObservationsByConsultation(input.consultationId);
+    }),
+    createForConsultation: protectedProcedure.input(z.object({
+      consultationId: z.number(),
+      content: z.string().trim().min(1).max(12000),
+      category: z.enum(["clinique", "infirmier", "evolution", "autre"]).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const consultation = await db.getConsultationById(input.consultationId);
+      if (!consultation) throw new TRPCError({ code: "NOT_FOUND", message: "Consultation introuvable" });
+      await requireServiceMember(consultation.serviceId, ctx.user.id);
+      requirePermission(ctx.user.medicalRole, "note.create");
+      const id = await db.createObservation({ consultationId: consultation.id, serviceId: consultation.serviceId, content: input.content, category: input.category, createdById: ctx.user.id });
+      await db.logActivity({ serviceId: consultation.serviceId, userId: ctx.user.id, action: "medical_observation_created", details: "Observation médicale ajoutée à la consultation" });
       return { id };
     }),
   }),

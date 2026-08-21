@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useLocation, useParams } from "wouter";
 import { getLoginUrl } from "@/const";
-import { ArrowLeft, Activity, User, UserPlus, UserMinus, FileText, Edit, Forward, Bed } from "lucide-react";
+import { ArrowLeft, Activity, User, UserPlus, UserMinus, FileText, Edit, Forward, Bed, Eye, ShieldCheck } from "lucide-react";
 
 const actionIcons: Record<string, any> = {
   patient_admitted: UserPlus,
@@ -18,6 +18,8 @@ const actionIcons: Record<string, any> = {
   releve_generated: FileText,
   service_created: Activity,
   member_joined: User,
+  medical_observation_created: Eye,
+  patient_civil_identity_accessed: ShieldCheck,
 };
 
 const actionColors: Record<string, string> = {
@@ -31,6 +33,8 @@ const actionColors: Record<string, string> = {
   releve_generated: "bg-purple-100 text-purple-700",
   service_created: "bg-primary/10 text-primary",
   member_joined: "bg-indigo-100 text-indigo-700",
+  medical_observation_created: "bg-teal-100 text-teal-700",
+  patient_civil_identity_accessed: "bg-slate-100 text-slate-700",
 };
 
 const actionLabels: Record<string, string> = {
@@ -44,6 +48,8 @@ const actionLabels: Record<string, string> = {
   releve_generated: "Relève générée",
   service_created: "Service créé",
   member_joined: "A rejoint l'équipe",
+  medical_observation_created: "Observation médicale ajoutée",
+  patient_civil_identity_accessed: "État civil consulté",
 };
 
 export default function Timeline() {

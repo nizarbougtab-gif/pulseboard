@@ -8,7 +8,6 @@ import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Bed, Stethoscope } from "lucide-react";
-import { sanitizePatientInitial } from "@shared/patientIdentity";
 
 type CarePath = "hospitalisation" | "consultation";
 
@@ -30,6 +29,9 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
   const [gender, setGender] = useState<"M" | "F">("M");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phone, setPhone] = useState("");
+  const [profession, setProfession] = useState("");
+  const [address, setAddress] = useState("");
+  const [emergencyContact, setEmergencyContact] = useState("");
   const [motif, setMotif] = useState("");
   const [consultNotes, setConsultNotes] = useState("");
 
@@ -46,6 +48,9 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
     setGender("M");
     setDateOfBirth("");
     setPhone("");
+    setProfession("");
+    setAddress("");
+    setEmergencyContact("");
     setMotif("");
     setConsultNotes("");
   };
@@ -79,7 +84,7 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName.trim() || !lastName.trim()) {
-      toast.error("Les initiales du patient sont obligatoires");
+      toast.error("Le nom et le prénom du patient sont obligatoires");
       return;
     }
 
@@ -92,6 +97,12 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
         serviceId,
         patientFirstName: firstName.trim(),
         patientLastName: lastName.trim(),
+        patientDateOfBirth: dateOfBirth || undefined,
+        patientGender: gender,
+        patientProfession: profession.trim() || undefined,
+        patientAddress: address.trim() || undefined,
+        patientPhone: phone.trim() || undefined,
+        patientEmergencyContact: emergencyContact.trim() || undefined,
         motif: motif.trim(),
         notes: consultNotes.trim() || undefined,
       });
@@ -108,7 +119,10 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
       allergies: allergies.trim() || undefined,
       gender,
       dateOfBirth: dateOfBirth || undefined,
+      profession: profession.trim() || undefined,
+      address: address.trim() || undefined,
       phone: phone.trim() || undefined,
+      emergencyContact: emergencyContact.trim() || undefined,
     });
   };
 
@@ -145,17 +159,16 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Initiale du nom *</Label>
-              <Input maxLength={1} autoComplete="off" placeholder="N" value={lastName} onChange={e => setLastName(sanitizePatientInitial(e.target.value))} />
+              <Label>Nom *</Label>
+              <Input maxLength={100} autoComplete="family-name" placeholder="Ndiaye" value={lastName} onChange={e => setLastName(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Initiale du prénom *</Label>
-              <Input maxLength={1} autoComplete="off" placeholder="A" value={firstName} onChange={e => setFirstName(sanitizePatientInitial(e.target.value))} />
+              <Label>Prénom *</Label>
+              <Input maxLength={100} autoComplete="given-name" placeholder="Aminata" value={firstName} onChange={e => setFirstName(e.target.value)} />
             </div>
           </div>
 
-          {carePath === "hospitalisation" ? <>
-            <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>Genre</Label>
                 <Select value={gender} onValueChange={(v: "M" | "F") => setGender(v)}>
@@ -168,10 +181,17 @@ export default function AdmitPatientDialog({ open, onOpenChange, serviceId, onCr
                 <Input type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Téléphone</Label>
-                <Input placeholder="+221..." value={phone} onChange={e => setPhone(e.target.value)} />
+                <Label>Profession</Label>
+                <Input placeholder="Enseignante" value={profession} onChange={e => setProfession(e.target.value)} />
               </div>
-            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2"><Label>Téléphone</Label><Input placeholder="+221..." value={phone} onChange={e => setPhone(e.target.value)} /></div>
+            <div className="space-y-2"><Label>Contact d'urgence</Label><Input placeholder="Nom et téléphone" value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} /></div>
+          </div>
+          <div className="space-y-2"><Label>Adresse</Label><Input placeholder="Quartier, ville" value={address} onChange={e => setAddress(e.target.value)} /></div>
+
+          {carePath === "hospitalisation" ? <>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Numéro de lit</Label>
