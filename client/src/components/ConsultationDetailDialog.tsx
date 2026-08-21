@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward, LogOut } from "lucide-react";
+import { Clock, Calendar, FlaskConical, FileText, ChevronDown, ChevronUp, Bed, Forward, LogOut, Eye, Plus } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { patientInitials } from "@shared/patientIdentity";
 
@@ -62,6 +62,13 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
   const [showReferral, setShowReferral] = useState(false);
   const [referralDestination, setReferralDestination] = useState("");
   const [referralReason, setReferralReason] = useState("");
+  const [observationContent, setObservationContent] = useState("");
+  const [observationCategory, setObservationCategory] = useState<"clinique" | "infirmier" | "evolution" | "autre">("clinique");
+
+  const { data: medicalObservations = [] } = trpc.observations.byConsultation.useQuery(
+    { consultationId: consultation.id },
+    { enabled: open },
+  );
 
   const { data: history = [] } = trpc.consultations.history.useQuery({
     serviceId: consultation.serviceId,
@@ -75,6 +82,15 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
       toast.success("Consultation enregistrée");
       onOpenChange(false);
     },
+  });
+
+  const createMedicalObservation = trpc.observations.createForConsultation.useMutation({
+    onSuccess: () => {
+      utils.observations.byConsultation.invalidate({ consultationId: consultation.id });
+      setObservationContent("");
+      toast.success("Observation médicale enregistrée");
+    },
+    onError: (error) => toast.error(error.message),
   });
 
   const hospitalize = trpc.consultations.hospitalize.useMutation({
@@ -142,7 +158,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[var(--pulseboard-green)]" />
-            {patientInitials(consultation.patientFirstName, consultation.patientLastName)}
+            {membership?.role === "stagiaire" ? patientInitials(consultation.patientFirstName, consultation.patientLastName) : [consultation.patientFirstName, consultation.patientLastName].filter(Boolean).join(" ")}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">Motif : {consultation.motif}</p>
           {consultation.disposition && (
@@ -181,6 +197,60 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
           </div>
 
           {/* Examens paracliniques */}
+          <section className="rounded-xl border border-border/60 bg-gray-50/60 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs flex items-center gap-1.5 font-semibold">
+                <Eye className="w-3.5 h-3.5 text-[var(--pulseboard-green)]" /> Observation médicale
+              </Label>
+              <Badge variant="outline" className="text-[10px]">{medicalObservations.length} entrée{medicalObservations.length > 1 ? "s" : ""}</Badge>
+            </div>
+
+            {medicalObservations.length > 0 && (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {medicalObservations.map(observation => (
+                  <article key={observation.id} className="rounded-lg border bg-white p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5 text-[10px] text-muted-foreground">
+                      <span>{observation.userName || "Membre du service"} · {observation.category || "clinique"}</span>
+                      <time>{new Date(observation.createdAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</time>
+                    </div>
+                    <p className="text-xs whitespace-pre-wrap">{observation.content}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+
+            {can("note.create") && (
+              <div className="space-y-2">
+                <Select value={observationCategory} onValueChange={(value: typeof observationCategory) => setObservationCategory(value)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="clinique">Observation clinique</SelectItem>
+                    <SelectItem value="evolution">Évolution</SelectItem>
+                    <SelectItem value="infirmier">Observation infirmière</SelectItem>
+                    <SelectItem value="autre">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Textarea
+                  rows={5}
+                  className="text-sm bg-white"
+                  placeholder={"Motif et histoire de la maladie :\nExamen clinique :\nHypothèses diagnostiques :\nConduite à tenir :"}
+                  value={observationContent}
+                  onChange={event => setObservationContent(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full bg-[var(--pulseboard-green)] text-white"
+                  disabled={!observationContent.trim() || createMedicalObservation.isPending}
+                  onClick={() => createMedicalObservation.mutate({ consultationId: consultation.id, content: observationContent.trim(), category: observationCategory })}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter à l'historique
+                </Button>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">Chaque observation est datée, signée et conservée dans l'historique.</p>
+          </section>
+
           <div>
             <Label className="text-xs flex items-center gap-1">
               <FlaskConical className="w-3 h-3" /> Examens paracliniques demandés
@@ -292,7 +362,7 @@ export default function ConsultationDetailDialog({ open, onOpenChange, consultat
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Hospitaliser après consultation</DialogTitle>
-          <p className="text-sm text-muted-foreground">{patientInitials(consultation.patientFirstName, consultation.patientLastName)}</p>
+          <p className="text-sm text-muted-foreground">{membership?.role === "stagiaire" ? patientInitials(consultation.patientFirstName, consultation.patientLastName) : [consultation.patientFirstName, consultation.patientLastName].filter(Boolean).join(" ")}</p>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>

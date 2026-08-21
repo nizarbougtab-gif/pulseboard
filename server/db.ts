@@ -409,7 +409,7 @@ export async function createPatient(data: {
   firstName: string; lastName: string; serviceId: number; createdById: number;
   bedNumber?: number; status?: "stable" | "modere" | "critique";
   diagnosis?: string; allergies?: string; antecedents?: string; notes?: string;
-  dateOfBirth?: string; gender?: "M" | "F"; phone?: string; emergencyContact?: string;
+  dateOfBirth?: string; gender?: "M" | "F"; profession?: string; address?: string; phone?: string; emergencyContact?: string;
   expectedDischarge?: string;
 }) {
   const db = getDb();
@@ -420,6 +420,7 @@ export async function createPatient(data: {
 export async function updatePatient(patientId: number, data: Partial<{
   firstName: string; lastName: string; bedNumber: number | null; status: "stable" | "modere" | "critique";
   diagnosis: string; allergies: string; antecedents: string; notes: string;
+  dateOfBirth: string | null; gender: "M" | "F" | null; profession: string | null; address: string | null; phone: string | null; emergencyContact: string | null;
   expectedDischarge: string | null; actualDischarge: string | null; dpsCompleted: boolean;
   dischargeDisposition: "sortie" | "refere" | null;
   referralDestination: string | null; referralReason: string | null; referralDate: Date | null;
@@ -884,7 +885,7 @@ export async function getConsultationById(id: number) {
   return consultation ?? null;
 }
 
-export async function createConsultation(data: { serviceId: number; patientFirstName: string; patientLastName: string; motif: string; createdById: number; notes?: string }) {
+export async function createConsultation(data: { serviceId: number; patientFirstName: string; patientLastName: string; patientDateOfBirth?: string; patientGender?: "M" | "F"; patientProfession?: string; patientAddress?: string; patientPhone?: string; patientEmergencyContact?: string; motif: string; createdById: number; notes?: string }) {
   const db = getDb();
   const [{ id }] = await db.insert(consultations).values(data).returning({ id: consultations.id });
   return id;
@@ -962,7 +963,7 @@ export async function createVitalSigns(data: { patientId: number; serviceId: num
 // ===== OBSERVATIONS =====
 export async function getObservationsByPatient(patientId: number) {
   const db = getDb();
-  const all = await db.select({
+  const direct = await db.select({
     id: observations.id,
     content: observations.content,
     category: observations.category,
@@ -972,10 +973,43 @@ export async function getObservationsByPatient(patientId: number) {
   }).from(observations)
     .leftJoin(users, eq(observations.createdById, users.id))
     .where(eq(observations.patientId, patientId));
+
+  const linkedConsultations = await db.select({ id: consultations.id })
+    .from(consultations)
+    .where(eq(consultations.linkedPatientId, patientId));
+  const fromConsultations = linkedConsultations.length === 0 ? [] : await db.select({
+    id: observations.id,
+    content: observations.content,
+    category: observations.category,
+    createdAt: observations.createdAt,
+    createdById: observations.createdById,
+    userName: users.name,
+  }).from(observations)
+    .leftJoin(users, eq(observations.createdById, users.id))
+    .where(inArray(observations.consultationId, linkedConsultations.map(item => item.id)));
+
+  return [
+    ...direct.map(item => ({ ...item, encounterType: "hospitalisation" as const })),
+    ...fromConsultations.map(item => ({ ...item, encounterType: "consultation" as const })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getObservationsByConsultation(consultationId: number) {
+  const db = getDb();
+  const all = await db.select({
+    id: observations.id,
+    content: observations.content,
+    category: observations.category,
+    createdAt: observations.createdAt,
+    createdById: observations.createdById,
+    userName: users.name,
+  }).from(observations)
+    .leftJoin(users, eq(observations.createdById, users.id))
+    .where(eq(observations.consultationId, consultationId));
   return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function createObservation(data: { patientId: number; serviceId: number; content: string; category?: "clinique" | "infirmier" | "evolution" | "autre"; createdById: number }) {
+export async function createObservation(data: { patientId?: number; consultationId?: number; serviceId: number; content: string; category?: "clinique" | "infirmier" | "evolution" | "autre"; createdById: number }) {
   const db = getDb();
   const [{ id }] = await db.insert(observations).values(data).returning({ id: observations.id });
   return id;

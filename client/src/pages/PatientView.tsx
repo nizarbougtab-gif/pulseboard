@@ -15,14 +15,14 @@ import { getLoginUrl } from "@/const";
 import {
   ArrowLeft, AlertTriangle, FileText, ListChecks, Heart,
   Eye, Plus, CheckCircle, Clock, MoreVertical,
-  LayoutGrid, BookOpen, GraduationCap, User, Loader2, Forward, LogOut, Bed
+  LayoutGrid, BookOpen, GraduationCap, User, Loader2, Forward, LogOut, Bed, Contact, ShieldCheck
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import BottomNav from "@/components/BottomNav";
 import PulseBoardBrand from "@/components/PulseBoardBrand";
 import { patientInitials } from "@shared/patientIdentity";
 
-type PatientTab = "suivi" | "taches" | "vitaux" | "obs";
+type PatientTab = "suivi" | "taches" | "vitaux" | "obs" | "identite";
 
 export default function PatientView() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +57,10 @@ export default function PatientView() {
   const { data: patient, isLoading } = trpc.patients.get.useQuery({ id: patientId }, { enabled: patientId > 0 });
   const patientServiceId = patient?.serviceId ?? 0;
   const { data: membership } = trpc.membership.myMembership.useQuery({ serviceId: patientServiceId }, { enabled: patientServiceId > 0 });
+  const { data: civilIdentity, isLoading: civilIdentityLoading } = trpc.patients.civilIdentity.useQuery(
+    { id: patientId },
+    { enabled: activeTab === "identite" && membership?.role !== "stagiaire" },
+  );
   const canApplyDecision = can("patient.discharge") && membership?.role !== undefined && membership.role !== "stagiaire" && !membership.provisional;
   const { data: service } = trpc.services.get.useQuery({ id: patientServiceId }, { enabled: patientServiceId > 0 });
   const { data: servicePatients = [] } = trpc.patients.list.useQuery(
@@ -246,7 +250,7 @@ export default function PatientView() {
             </button>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="font-semibold text-lg">{patientInitials(patient.firstName, patient.lastName)}</h1>
+                <h1 className="font-semibold text-lg">{membership?.role === "stagiaire" ? patientInitials(patient.firstName, patient.lastName) : [patient.firstName, patient.lastName].filter(Boolean).join(" ")}</h1>
                 <span className={`w-2.5 h-2.5 rounded-full ${patient.status === "critique" ? "bg-[var(--pulseboard-red)]" : patient.status === "modere" ? "bg-[var(--pulseboard-amber)]" : "bg-[var(--pulseboard-green)]"}`} />
               </div>
             </div>
@@ -387,6 +391,7 @@ export default function PatientView() {
           { key: "taches" as PatientTab, label: "Tâches", icon: ListChecks },
           { key: "vitaux" as PatientTab, label: "Vitaux", icon: Heart },
           { key: "obs" as PatientTab, label: "Obs", icon: Eye },
+          ...(membership?.role !== "stagiaire" ? [{ key: "identite" as PatientTab, label: "État civil", icon: Contact }] : []),
         ].map(tab => (
           <button
             key={tab.key}
@@ -556,17 +561,17 @@ export default function PatientView() {
         {activeTab === "obs" && (
           <div className="max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-sm">Observations</h2>
+              <h2 className="font-semibold text-sm">Observations médicales</h2>
               {can("note.create") && (
                 <Button size="sm" className="bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white h-8" onClick={() => setShowObsDialog(true)}>
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Observation
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Nouvelle observation
                 </Button>
               )}
             </div>
             {observations.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Eye className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                <p className="text-sm">Aucune observation</p>
+                <p className="text-sm">Aucune observation médicale</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -575,6 +580,7 @@ export default function PatientView() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-[10px] capitalize">{obs.category}</Badge>
+                        {obs.encounterType === "consultation" && <Badge className="text-[10px] bg-blue-50 text-blue-700">Consultation initiale</Badge>}
                         <span className="text-xs text-muted-foreground">{obs.userName}</span>
                       </div>
                       <span className="text-[11px] text-muted-foreground">
@@ -584,6 +590,29 @@ export default function PatientView() {
                     <p className="text-sm whitespace-pre-wrap">{obs.content}</p>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "identite" && membership?.role !== "stagiaire" && (
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-sm flex items-center gap-2"><Contact className="w-4 h-4 text-[var(--pulseboard-green)]" /> État civil protégé</h2>
+              <Badge variant="outline" className="text-[10px] flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Accès journalisé</Badge>
+            </div>
+            {civilIdentityLoading || !civilIdentity ? <Skeleton className="h-48 rounded-xl" /> : (
+              <div className="bg-white rounded-xl border border-border/60 p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div><p className="text-xs text-muted-foreground">Nom complet</p><p className="font-medium">{civilIdentity.firstName} {civilIdentity.lastName}</p></div>
+                <div><p className="text-xs text-muted-foreground">Sexe</p><p className="font-medium">{civilIdentity.gender === "F" ? "Féminin" : "Masculin"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Date de naissance</p><p className="font-medium">{civilIdentity.dateOfBirth || "Non renseignée"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Profession</p><p className="font-medium">{civilIdentity.profession || "Non renseignée"}</p></div>
+                {!civilIdentity.restricted ? <>
+                  <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Adresse</p><p className="font-medium">{civilIdentity.address || "Non renseignée"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Téléphone</p><p className="font-medium">{civilIdentity.phone || "Non renseigné"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Contact d'urgence</p><p className="font-medium">{civilIdentity.emergencyContact || "Non renseigné"}</p></div>
+                </> : <div className="sm:col-span-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Votre accès au Hall est provisoire : l'adresse et les contacts seront visibles après vérification du rôle.</div>}
+                <p className="sm:col-span-2 text-[10px] text-muted-foreground border-t pt-3">Cette consultation de l'état civil est enregistrée dans le journal du service.</p>
               </div>
             )}
           </div>
@@ -761,7 +790,7 @@ export default function PatientView() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="w-5 h-5 text-[var(--pulseboard-green)]" />
-              Ajouter une observation
+              Ajouter une observation médicale
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -777,10 +806,11 @@ export default function PatientView() {
             </div>
             <div>
               <Label className="text-xs">Observation</Label>
-              <Textarea placeholder="Décrivez votre observation..." value={obsContent} onChange={e => setObsContent(e.target.value)} className="mt-1 min-h-[120px]" />
+              <Textarea placeholder={"Motif et histoire de la maladie :\nExamen clinique :\nHypothèses diagnostiques :\nConduite à tenir :"} value={obsContent} onChange={e => setObsContent(e.target.value)} className="mt-1 min-h-[180px]" />
             </div>
           </div>
           <DialogFooter>
+            <p className="mr-auto text-[10px] text-muted-foreground max-w-[220px]">L'observation sera datée, signée et conservée dans l'historique.</p>
             <Button variant="ghost" onClick={() => setShowObsDialog(false)}>Annuler</Button>
             <Button className="bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white" disabled={!obsContent.trim()} onClick={() => createObs.mutate({ patientId, serviceId: patient.serviceId, content: obsContent, category: obsCategory })}>
               Enregistrer
