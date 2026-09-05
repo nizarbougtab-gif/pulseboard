@@ -1,5 +1,6 @@
 import { useLocation } from "wouter";
 import { LayoutGrid, BookOpen, GraduationCap, User, Bed, Clock } from "lucide-react";
+import { HALL_SERVICE_ENABLED } from "@/lib/features";
 
 type ServiceTab = "lits" | "garde" | "messages";
 
@@ -16,6 +17,20 @@ export default function BottomNav({ serviceId, activeServiceTab, onServiceTabCha
     localStorage.setItem("lastServiceId", String(serviceId));
   }
   const lastServiceId = serviceId || localStorage.getItem("lastServiceId");
+
+  if (!HALL_SERVICE_ENABLED) {
+    const personalItems = [
+      { icon: GraduationCap, label: "Mon carnet", path: "/mon-stage" },
+      { icon: Clock, label: "Hall bientôt", path: "/hall" },
+      { icon: User, label: "Profil", path: "/profile" },
+    ];
+    return <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border/50 flex md:hidden z-50 safe-area-bottom">
+      {personalItems.map(({ icon: Icon, label, path }) => {
+        const active = location === path || (path !== "/hall" && location.startsWith(path));
+        return <button key={label} onClick={() => navigate(path)} className={`min-h-14 flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors ${active ? "text-violet-700" : "text-muted-foreground"}`}><Icon className="w-5 h-5"/>{label}</button>;
+      })}
+    </nav>;
+  }
 
   const serviceItems = onServiceTabChange ? [
     { icon: LayoutGrid, label: "Services", path: "/dashboard" },

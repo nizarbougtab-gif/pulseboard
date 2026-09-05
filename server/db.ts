@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, subscriptions, payments, accountTokens, securityEvents, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, subscriptions, payments, hallWaitlist, accountTokens, securityEvents, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 import { patientInitials } from "../shared/patientIdentity";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
@@ -86,6 +86,22 @@ export async function getSubscription(userId: number) {
     billingCycle: subscription?.billingCycle ?? "monthly",
     currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
   };
+}
+
+export async function joinHallWaitlist(data: {
+  name: string;
+  email: string;
+  phone?: string;
+  medicalRole: "externe" | "interne" | "resident" | "medecin";
+  hospitalName: string;
+  serviceName: string;
+}) {
+  const database = getDb();
+  const normalized = { ...data, email: data.email.trim().toLowerCase(), updatedAt: new Date() };
+  await database.insert(hallWaitlist).values(normalized).onConflictDoUpdate({
+    target: hallWaitlist.email,
+    set: normalized,
+  });
 }
 
 export async function getFreePlanUsage(userId: number) {

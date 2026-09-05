@@ -12,5 +12,6 @@ export const ENV = {
   emailFrom: process.env.EMAIL_FROM ?? "PulseBoard <onboarding@resend.dev>",
   wavePaymentLink: process.env.WAVE_PAYMENT_LINK ?? "",
   billingEnforced: process.env.BILLING_ENFORCED === "true",
+  hallServiceEnabled: process.env.HALL_SERVICE_ENABLED === "true",
   adminEmails: (process.env.PULSEBOARD_ADMIN_EMAILS ?? "").split(",").map(value => value.trim().toLowerCase()).filter(Boolean),
 };

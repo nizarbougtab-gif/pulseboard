@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 
+process.env.HALL_SERVICE_ENABLED = "true";
+
 vi.mock("./db", () => ({
   getHospitals: vi.fn(async () => []),
   getPatientById: vi.fn(async (id: number) => ({ id, serviceId: 1, firstName: "Test", lastName: "Patient" })),

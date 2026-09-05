@@ -111,9 +111,14 @@ NODE_ENV=production node dist/index.js
 ```
 
 Variables d'environnement requises en production :
-- `DATABASE_URL` — URL de connexion MySQL
-- `VITE_OAUTH_PORTAL_URL` — URL du portail OAuth
-- `VITE_APP_ID` — ID de l'application
+- `DATABASE_URL` — URL de connexion PostgreSQL
+- `JWT_SECRET` — clé secrète longue utilisée pour les sessions
+- `PUBLIC_APP_URL` — adresse publique de PulseBoard
+
+Mode de lancement du Hall :
+- `HALL_SERVICE_ENABLED=false` désactive les procédures collectives côté serveur.
+- `VITE_HALL_SERVICE_ENABLED=false` masque le Hall côté interface et affiche la liste d'attente.
+- Pour ouvrir le Hall plus tard, définir les deux variables à `true` puis redéployer.
 
 ---
 

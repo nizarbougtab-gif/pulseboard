@@ -65,12 +65,14 @@ async function makeSessionToken(openId: string, name: string) {
 }
 
 async function requireServiceMember(serviceId: number, userId: number) {
+  requireHallEnabled();
   if (!(await db.isServiceMember(serviceId, userId))) {
     throw new TRPCError({ code: "FORBIDDEN", message: FORBIDDEN_MESSAGE });
   }
 }
 
 async function requireServiceChef(serviceId: number, userId: number) {
+  requireHallEnabled();
   if (!(await db.isServiceChef(serviceId, userId))) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Action réservée au chef du service" });
   }
@@ -164,6 +166,7 @@ async function requireRotationCapacity(userId: number) {
 }
 
 async function requireHallPlan(userId: number) {
+  requireHallEnabled();
   if (!ENV.billingEnforced) return;
   const subscription = await db.getSubscription(userId);
   if (subscription.plan !== "hall_carnet") {
@@ -171,8 +174,29 @@ async function requireHallPlan(userId: number) {
   }
 }
 
+function requireHallEnabled() {
+  if (!ENV.hallServiceEnabled) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Le Hall de service ouvrira bientôt. Votre carnet personnel reste disponible." });
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
+  launch: router({
+    joinHallWaitlist: publicProcedure.input(z.object({
+      name: z.string().trim().min(2).max(100),
+      email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
+      phone: z.string().trim().max(30).optional(),
+      medicalRole: z.enum(["externe", "interne", "resident", "medecin"]),
+      hospitalName: z.string().trim().min(2).max(150),
+      serviceName: z.string().trim().min(2).max(150),
+      consent: z.literal(true),
+    })).mutation(async ({ input }) => {
+      const { consent: _consent, ...entry } = input;
+      await db.joinHallWaitlist(entry);
+      return { success: true };
+    }),
+  }),
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     register: publicProcedure.input(z.object({
@@ -393,6 +417,7 @@ export const appRouter = router({
   // Services
   services: router({
     list: protectedProcedure.query(async ({ ctx }) => {
+      if (!ENV.hallServiceEnabled) return [];
       return db.getServicesByUser(ctx.user.id);
     }),
     get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
@@ -447,6 +472,7 @@ export const appRouter = router({
       return patients.map(patient => redactPatientForMembership(patient, membership));
     }),
     search: protectedProcedure.input(z.object({ query: z.string().trim().min(2).max(100) })).query(async ({ ctx, input }) => {
+      requireHallEnabled();
       const matches = await db.searchPatients(input.query);
       const accessible = await Promise.all(matches.map(async patient => {
         const membership = await db.getServiceMembership(patient.serviceId, ctx.user.id);

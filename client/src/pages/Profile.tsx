@@ -13,6 +13,7 @@ import { getLoginUrl } from "@/const";
 import { ArrowLeft, User, Building2, Stethoscope, Save, Download, CreditCard, Trash2, LogOut, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { HALL_SERVICE_ENABLED } from "@/lib/features";
 
 export default function Profile() {
   const { user, isAuthenticated, loading, logout } = useAuth({
@@ -133,13 +134,13 @@ export default function Profile() {
                 <p className="text-xs text-muted-foreground">
                   {(user as any)?.medicalRoleVerified ? "✓ Rôle médical confirmé et verrouillé" : "Rôle déclaré verrouillé · accès provisoire jusqu’à confirmation"}
                 </p>
-                {!roleStatus?.pendingRequest && (
+                {HALL_SERVICE_ENABLED && !roleStatus?.pendingRequest && (
                   <Button type="button" size="sm" variant="outline" onClick={() => setShowRoleRequest(true)}>
                     Demander un changement
                   </Button>
                 )}
               </div>
-              {roleStatus?.pendingRequest && (
+              {HALL_SERVICE_ENABLED && roleStatus?.pendingRequest && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                   <div className="flex items-center justify-between gap-2">
                     <span>Demande en attente : {roleStatus.pendingRequest.currentRole} → {roleStatus.pendingRequest.requestedRole}</span>
@@ -185,7 +186,7 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
-        {roleStatus?.history && roleStatus.history.length > 0 && (
+        {HALL_SERVICE_ENABLED && roleStatus?.history && roleStatus.history.length > 0 && (
           <Card className="mt-5">
             <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="w-4 h-4" />Historique du rôle</CardTitle></CardHeader>
             <CardContent className="space-y-2">

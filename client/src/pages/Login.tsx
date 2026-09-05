@@ -28,7 +28,7 @@ export default function Login() {
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
       await utils.auth.me.invalidate();
-      navigate("/dashboard");
+      navigate("/mon-stage");
     },
     onError: (err) => setLoginError(err.message),
   });
@@ -36,7 +36,7 @@ export default function Login() {
   const registerMutation = trpc.auth.register.useMutation({
     onSuccess: async () => {
       await utils.auth.me.invalidate();
-      navigate("/dashboard");
+      navigate("/mon-stage");
     },
     onError: (err) => setRegError(err.message),
   });
@@ -58,7 +58,7 @@ export default function Login() {
             <Card>
               <CardHeader>
                 <CardTitle>Connexion</CardTitle>
-                <CardDescription>Accédez à votre tableau de bord médical</CardDescription>
+                <CardDescription>Accédez à votre carnet de stage personnel</CardDescription>
               </CardHeader>
               <CardContent>
                 <form

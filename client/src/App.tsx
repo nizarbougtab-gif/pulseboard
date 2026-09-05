@@ -4,7 +4,8 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import Home from "./pages/HomeLaunch";
+import { HALL_SERVICE_ENABLED } from "./lib/features";
 import { lazy, Suspense } from "react";
 import PwaStatus from "./components/PwaStatus";
 
@@ -16,7 +17,8 @@ const Timeline = lazy(() => import("./pages/Timeline"));
 const Profile = lazy(() => import("./pages/Profile"));
 const MonStage = lazy(() => import("./pages/MonStage"));
 const PersonalPatientView = lazy(() => import("./pages/PersonalPatientView"));
-const Subscription = lazy(() => import("./pages/Subscription"));
+const HallComingSoon = lazy(() => import("./pages/HallComingSoon"));
+const Subscription = lazy(() => import("./pages/SubscriptionLaunch"));
 const ForgotPassword = lazy(() => import("./pages/AccountAccess").then(module => ({ default: module.ForgotPassword })));
 const ResetPassword = lazy(() => import("./pages/AccountAccess").then(module => ({ default: module.ResetPassword })));
 const VerifyEmail = lazy(() => import("./pages/AccountAccess").then(module => ({ default: module.VerifyEmail })));
@@ -45,10 +47,11 @@ function Router() {
         <Route path="/verify-email" component={VerifyEmail} />
         <Route path="/privacy" component={Privacy} />
         <Route path="/terms" component={Terms} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/service/:id" component={ServiceView} />
-        <Route path="/patient/:id" component={PatientView} />
-        <Route path="/timeline/:serviceId" component={Timeline} />
+        <Route path="/dashboard" component={HALL_SERVICE_ENABLED ? Dashboard : MonStage} />
+        <Route path="/hall" component={HallComingSoon} />
+        <Route path="/service/:id" component={HALL_SERVICE_ENABLED ? ServiceView : HallComingSoon} />
+        <Route path="/patient/:id" component={HALL_SERVICE_ENABLED ? PatientView : HallComingSoon} />
+        <Route path="/timeline/:serviceId" component={HALL_SERVICE_ENABLED ? Timeline : HallComingSoon} />
         <Route path="/profile" component={Profile} />
         <Route path="/subscription" component={Subscription} />
         <Route path="/mon-stage" component={MonStage} />
