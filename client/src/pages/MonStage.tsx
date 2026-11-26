@@ -7,16 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useLocation } from "wouter";
 import { getLoginUrl } from "@/const";
 import { ROLE_LABELS, ROLE_COLORS, type MedicalRole } from "@/lib/permissions";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, BookOpen, CheckCircle, Clock, FileText,
-  Stethoscope, Award, BarChart2, ListChecks, ChevronRight, LogOut, Activity, Printer, Lock, ShieldCheck
+  Stethoscope, Award, BarChart2, ListChecks, ChevronRight, LogOut, Activity, Printer, Lock, ShieldCheck, FlaskConical
 } from "lucide-react";
 import { useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import { BETA_MODE } from "@/lib/features";
 
 type StageTab = "apercu" | "rotations" | "competences" | "gestes" | "notes" | "patients";
 
@@ -36,6 +38,14 @@ const CAT_COLORS: Record<string, string> = {
   autre: "bg-gray-100 text-gray-600",
 };
 
+const BETA_SCENARIOS = [
+  { firstName: "Ma", lastName: "D", age: "54", gender: "M" as const, status: "modere" as const, diagnosis: "Pneumopathie communautaire fictive", allergies: "Aucune allergie fictive", serviceName: "Médecine interne", bedNumber: "", encounterType: "hospitalisation" as const },
+  { firstName: "Fa", lastName: "S", age: "23", gender: "F" as const, status: "stable" as const, diagnosis: "Appendicite aiguë fictive", allergies: "Allergie fictive à la pénicilline", serviceName: "Chirurgie", bedNumber: "", encounterType: "consultation" as const },
+  { firstName: "Id", lastName: "N", age: "67", gender: "M" as const, status: "critique" as const, diagnosis: "Décompensation cardiaque fictive", allergies: "Non renseignées (scénario fictif)", serviceName: "Cardiologie", bedNumber: "", encounterType: "hospitalisation" as const },
+  { firstName: "Am", lastName: "B", age: "31", gender: "F" as const, status: "stable" as const, diagnosis: "Crise d’asthme fictive", allergies: "Aucune allergie fictive", serviceName: "Pneumologie", bedNumber: "", encounterType: "consultation" as const },
+  { firstName: "Sa", lastName: "K", age: "45", gender: "M" as const, status: "modere" as const, diagnosis: "Acidocétose diabétique fictive", allergies: "Non renseignées (scénario fictif)", serviceName: "Urgences", bedNumber: "", encounterType: "hospitalisation" as const },
+];
+
 export default function MonStage() {
   const { user, medicalRole, isAuthenticated, loading, logout } = useAuth({
     redirectOnUnauthenticated: true,
@@ -51,7 +61,8 @@ export default function MonStage() {
   const [procedureForm, setProcedureForm] = useState({ title: "", rotationId: "", personalPatientId: "", participationLevel: "observed", outcome: "success", attempts: "1", reflection: "" });
 
   const [showAdmitDialog, setShowAdmitDialog] = useState(false);
-  const [admitForm, setAdmitForm] = useState({ firstName: "", lastName: "", gender: "M" as "M" | "F", dateOfBirth: "", phone: "", status: "stable" as "stable" | "modere" | "critique", diagnosis: "", allergies: "", serviceName: "", bedNumber: "", encounterType: "hospitalisation" as "consultation" | "hospitalisation" });
+  const [admitForm, setAdmitForm] = useState({ firstName: "", lastName: "", age: "", gender: "M" as "M" | "F", status: "stable" as "stable" | "modere" | "critique", diagnosis: "", allergies: "", serviceName: "", bedNumber: "", encounterType: "hospitalisation" as "consultation" | "hospitalisation" });
+  const [fictitiousDataConfirmed, setFictitiousDataConfirmed] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: stats } = trpc.personal.stats.useQuery();
@@ -84,7 +95,7 @@ export default function MonStage() {
   });
 
   const admitPersonalPatient = trpc.personalPatients.create.useMutation({
-    onSuccess: () => { utils.personalPatients.list.invalidate(); setShowAdmitDialog(false); setAdmitForm({ firstName: "", lastName: "", gender: "M", dateOfBirth: "", phone: "", status: "stable", diagnosis: "", allergies: "", serviceName: "", bedNumber: "", encounterType: "hospitalisation" }); toast.success("Cas ajouté"); },
+    onSuccess: () => { utils.personalPatients.list.invalidate(); setShowAdmitDialog(false); setAdmitForm({ firstName: "", lastName: "", age: "", gender: "M", status: "stable", diagnosis: "", allergies: "", serviceName: "", bedNumber: "", encounterType: "hospitalisation" }); setFictitiousDataConfirmed(false); toast.success("Cas fictif ajouté"); },
     onError: error => toast.error(error.message),
   });
 
@@ -122,7 +133,7 @@ export default function MonStage() {
     const report = window.open("", "_blank");
     if (!report) return toast.error("Autorisez l'ouverture de la fenêtre du rapport");
     const procedureRows = procedures.map(p => `<tr><td>${p.title}</td><td>${p.participationLevel}</td><td>${p.outcome || "—"}</td><td>${p.validated ? "Validé" : "À valider"}</td></tr>`).join("");
-    report.document.write(`<!doctype html><html><head><title>Portfolio de stage</title><style>body{font-family:Arial;padding:36px;color:#17201d}h1{color:#0d8a62}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:9px;text-align:left}.stats{display:flex;gap:18px;margin:20px 0}.stats b{font-size:22px}small{color:#667}</style></head><body><h1>Portfolio de stage — ${user?.name || ""}</h1><p>Généré le ${new Date().toLocaleDateString("fr-FR")}</p><div class="stats"><div><b>${rotations.length}</b><br><small>Rotations</small></div><div><b>${personalPatients.length}</b><br><small>Cas anonymisés</small></div><div><b>${procedures.length}</b><br><small>Gestes</small></div><div><b>${validatedComps}/${competences.length}</b><br><small>Compétences</small></div></div><h2>Gestes documentés</h2><table><thead><tr><th>Geste</th><th>Participation</th><th>Résultat</th><th>Validation</th></tr></thead><tbody>${procedureRows || "<tr><td colspan='4'>Aucun geste</td></tr>"}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
+    report.document.write(`<!doctype html><html><head><title>Portfolio de stage</title><style>body{font-family:Arial;padding:36px;color:#17201d}h1{color:#0d8a62}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:9px;text-align:left}.stats{display:flex;gap:18px;margin:20px 0}.stats b{font-size:22px}small{color:#667}</style></head><body><h1>Portfolio de stage — ${user?.name || ""}</h1><p>Généré le ${new Date().toLocaleDateString("fr-FR")}</p><div class="stats"><div><b>${rotations.length}</b><br><small>Rotations</small></div><div><b>${personalPatients.length}</b><br><small>Cas pseudonymisés</small></div><div><b>${procedures.length}</b><br><small>Gestes</small></div><div><b>${validatedComps}/${competences.length}</b><br><small>Compétences</small></div></div><h2>Gestes documentés</h2><table><thead><tr><th>Geste</th><th>Participation</th><th>Résultat</th><th>Validation</th></tr></thead><tbody>${procedureRows || "<tr><td colspan='4'>Aucun geste</td></tr>"}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
     report.document.close();
   };
 
@@ -166,7 +177,7 @@ export default function MonStage() {
       <div className="px-4 pb-3 max-w-2xl mx-auto">
         <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 flex items-start gap-3">
           <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center shrink-0"><ShieldCheck className="w-4 h-4" /></div>
-          <div><div className="flex items-center gap-1.5 text-xs font-semibold text-violet-900"><Lock className="w-3 h-3" /> Espace personnel et privé</div><p className="text-[11px] text-violet-800/80 mt-0.5">Vos cas sont anonymisés par initiales et ne sont pas visibles dans le hall collectif du service.</p></div>
+          <div><div className="flex items-center gap-1.5 text-xs font-semibold text-violet-900"><Lock className="w-3 h-3" /> Espace personnel et privé</div><p className="text-[11px] text-violet-800/80 mt-0.5">Vos cas sont pseudonymisés et ne sont pas visibles dans le hall collectif du service.</p></div>
         </div>
       </div>
 
@@ -386,7 +397,7 @@ export default function MonStage() {
         {activeTab === "patients" && (
           <div className="space-y-3">
             <Button size="sm" onClick={() => setShowAdmitDialog(true)} className="w-full min-h-10 bg-violet-600 text-white hover:bg-violet-700">
-              <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un cas anonymisé
+              <Plus className="w-3.5 h-3.5 mr-1" /> Ajouter un cas pseudonymisé
             </Button>
             {personalPatients.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-dashed border-border">
@@ -403,7 +414,10 @@ export default function MonStage() {
                       {p.firstName[0]}{p.lastName[0]}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm flex items-center gap-1.5">{p.firstName} {p.lastName}<Lock className="w-3 h-3 text-violet-500" /></p>
+                      <p className="font-medium text-sm flex items-center gap-1.5">
+                        {p.firstName} {p.lastName} · {p.age != null ? `${p.age} ans` : "âge non renseigné"} · {p.anonymousCode || `CAS-${String(p.id).padStart(4, "0")}`}
+                        <Lock className="w-3 h-3 text-violet-500 shrink-0" />
+                      </p>
                       <p className="text-xs text-muted-foreground truncate">{p.diagnosis || "Diagnostic en cours"} {p.serviceName ? `· ${p.serviceName}` : ""}</p>
                     </div>
                     <span className={`text-xs font-semibold ${p.status === "critique" ? "text-[var(--pulseboard-red)]" : p.status === "modere" ? "text-[var(--pulseboard-amber)]" : "text-[var(--pulseboard-green)]"}`}>
@@ -499,8 +513,24 @@ export default function MonStage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Ajouter un cas au carnet personnel</DialogTitle></DialogHeader>
           <div className="space-y-3 mt-2">
+            {BETA_MODE && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                onClick={() => {
+                  const scenario = BETA_SCENARIOS[Math.floor(Math.random() * BETA_SCENARIOS.length)];
+                  setAdmitForm(scenario);
+                  setFictitiousDataConfirmed(true);
+                }}
+              >
+                <FlaskConical className="mr-2 h-4 w-4" /> Charger un scénario entièrement fictif
+              </Button>
+            )}
             <div className="rounded-lg border border-[var(--pulseboard-green)]/20 bg-[var(--pulseboard-green-light)] p-3 text-xs text-[var(--pulseboard-green)]">
-              Saisissez uniquement les initiales. Le nom complet, le téléphone et la date de naissance ne sont pas conservés dans le carnet.
+              {BETA_MODE
+                ? "Phase bêta : toutes les informations doivent être inventées. Ne copiez pas un dossier réel en changeant seulement le nom."
+                : "Saisissez deux lettres du prénom, l’initiale du nom et l’âge. Le nom complet, le téléphone et la date de naissance ne sont pas conservés."}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -508,9 +538,16 @@ export default function MonStage() {
                 <Input maxLength={1} placeholder="D" value={admitForm.lastName} onChange={e => setAdmitForm(f => ({ ...f, lastName: e.target.value.replace(/[^A-Za-zÀ-ÿ]/g, "").slice(0, 1).toUpperCase() }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Initiale du prénom *</Label>
-                <Input maxLength={1} placeholder="A" value={admitForm.firstName} onChange={e => setAdmitForm(f => ({ ...f, firstName: e.target.value.replace(/[^A-Za-zÀ-ÿ]/g, "").slice(0, 1).toUpperCase() }))} />
+                <Label className="text-xs">2 premières lettres du prénom *</Label>
+                <Input maxLength={2} placeholder="Aw" value={admitForm.firstName} onChange={e => {
+                  const letters = e.target.value.replace(/[^A-Za-zÀ-ÿ]/g, "").slice(0, 2);
+                  setAdmitForm(f => ({ ...f, firstName: letters ? `${letters[0].toUpperCase()}${letters.slice(1).toLowerCase()}` : "" }));
+                }} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Âge en années *</Label>
+              <Input type="number" min={0} max={130} inputMode="numeric" placeholder="ex: 42" value={admitForm.age} onChange={e => setAdmitForm(f => ({ ...f, age: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Type de prise en charge</Label>
@@ -559,12 +596,22 @@ export default function MonStage() {
               <Label className="text-xs">Allergies</Label>
               <Input placeholder="ex: Pénicilline..." value={admitForm.allergies} onChange={e => setAdmitForm(f => ({ ...f, allergies: e.target.value }))} />
             </div>
+            {BETA_MODE && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={fictitiousDataConfirmed}
+                  onCheckedChange={checked => setFictitiousDataConfirmed(checked === true)}
+                />
+                <span>Je confirme que ce patient, son âge, son diagnostic, ses observations et toutes les informations associées sont entièrement fictifs.</span>
+              </label>
+            )}
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => setShowAdmitDialog(false)}>Annuler</Button>
               <Button
                 className="flex-1 bg-[var(--pulseboard-green)] text-white"
-                disabled={!admitForm.firstName || !admitForm.lastName || admitPersonalPatient.isPending}
-                onClick={() => admitPersonalPatient.mutate({ ...admitForm, bedNumber: admitForm.bedNumber ? Number(admitForm.bedNumber) : undefined })}
+                disabled={admitForm.firstName.length !== 2 || !admitForm.lastName || admitForm.age === "" || Number(admitForm.age) < 0 || Number(admitForm.age) > 130 || (BETA_MODE && !fictitiousDataConfirmed) || admitPersonalPatient.isPending}
+                onClick={() => admitPersonalPatient.mutate({ ...admitForm, age: Number(admitForm.age), bedNumber: admitForm.bedNumber ? Number(admitForm.bedNumber) : undefined, fictitiousDataConfirmed })}
               >
                 Ajouter au carnet
               </Button>
@@ -618,7 +665,7 @@ export default function MonStage() {
           <div className="space-y-3">
             <div><Label className="text-xs">Geste *</Label><Input value={procedureForm.title} onChange={e => setProcedureForm(f => ({ ...f, title: e.target.value }))} placeholder="Ex. pose de voie veineuse" /></div>
             <div><Label className="text-xs">Rotation</Label><Select value={procedureForm.rotationId || "none"} onValueChange={v => setProcedureForm(f => ({ ...f, rotationId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sans rotation</SelectItem>{rotations.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.serviceName}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label className="text-xs">Cas anonymisé associé</Label><Select value={procedureForm.personalPatientId || "none"} onValueChange={v => setProcedureForm(f => ({ ...f, personalPatientId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Aucun cas</SelectItem>{personalPatients.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.anonymousCode || `${p.firstName} ${p.lastName}`}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label className="text-xs">Cas pseudonymisé associé</Label><Select value={procedureForm.personalPatientId || "none"} onValueChange={v => setProcedureForm(f => ({ ...f, personalPatientId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Aucun cas</SelectItem>{personalPatients.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.anonymousCode || `${p.firstName} ${p.lastName}`}</SelectItem>)}</SelectContent></Select></div>
             <div><Label className="text-xs">Niveau de participation</Label><Select value={procedureForm.participationLevel} onValueChange={v => setProcedureForm(f => ({ ...f, participationLevel: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="observed">Observé</SelectItem><SelectItem value="assisted">Assisté</SelectItem><SelectItem value="supervised">Réalisé sous supervision</SelectItem><SelectItem value="autonomous">Réalisé en autonomie</SelectItem></SelectContent></Select></div>
             <div className="grid grid-cols-2 gap-3"><div><Label className="text-xs">Résultat</Label><Select value={procedureForm.outcome} onValueChange={v => setProcedureForm(f => ({ ...f, outcome: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="success">Réussi</SelectItem><SelectItem value="partial">Partiel</SelectItem><SelectItem value="failed">Non réussi</SelectItem></SelectContent></Select></div><div><Label className="text-xs">Tentatives</Label><Input type="number" min="1" max="20" value={procedureForm.attempts} onChange={e => setProcedureForm(f => ({ ...f, attempts: e.target.value }))} /></div></div>
             <div><Label className="text-xs">Ce que j’ai appris / à améliorer</Label><Textarea rows={4} value={procedureForm.reflection} onChange={e => setProcedureForm(f => ({ ...f, reflection: e.target.value }))} /></div>

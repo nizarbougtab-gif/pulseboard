@@ -87,6 +87,15 @@ export const securityEvents = pgTable("security_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const betaFeedback = pgTable("beta_feedback", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  category: text("category").$type<"bug" | "idee" | "facilite" | "autre">().notNull(),
+  rating: integer("rating").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const medicalRoleChangeRequests = pgTable("medical_role_change_requests", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
@@ -390,6 +399,7 @@ export const personalPatients = pgTable("personal_patients", {
   firstName: text("firstName").notNull(),
   lastName: text("lastName").notNull(),
   dateOfBirth: text("dateOfBirth"),
+  age: integer("age"),
   gender: text("gender").$type<"M" | "F">().default("M"),
   phone: text("phone"),
   status: text("status").$type<"stable" | "modere" | "critique">().default("stable").notNull(),

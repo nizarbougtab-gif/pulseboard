@@ -10,11 +10,28 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation, canReviewMedicalRole, medicalRoleReviewApproved, type Permission } from "../shared/permissions";
-import { patientInitials, sanitizePatientInitial } from "../shared/patientIdentity";
+import { isPatientGivenNamePrefix, isPatientInitial, patientInitials, sanitizePatientInitial } from "../shared/patientIdentity";
 import { createHash } from "node:crypto";
 
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const FORBIDDEN_MESSAGE = "Vous n'avez pas accès à cette ressource";
+const INITIAL_INPUT = z.string()
+  .trim()
+  .refine(isPatientInitial, "Saisissez une seule initiale")
+  .transform(sanitizePatientInitial);
+const GIVEN_NAME_PREFIX_INPUT = z.string()
+  .trim()
+  .refine(isPatientGivenNamePrefix, "Saisissez les deux premières lettres du prénom");
+
+function ageFromDateOfBirth(value: string | null | undefined) {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  if (today.getMonth() + 1 < month || (today.getMonth() + 1 === month && today.getDate() < day)) age -= 1;
+  return age >= 0 && age <= 130 ? age : undefined;
+}
 
 function normalizePatientName(value: string) {
   const name = value.trim().replace(/\s+/g, " ");
@@ -182,6 +199,18 @@ function requireHallEnabled() {
 
 export const appRouter = router({
   system: systemRouter,
+  beta: router({
+    submitFeedback: protectedProcedure.input(z.object({
+      category: z.enum(["bug", "idee", "facilite", "autre"]),
+      rating: z.number().int().min(1).max(5),
+      message: z.string().trim().min(10, "Décrivez votre retour en au moins 10 caractères").max(2000),
+      containsNoPatientData: z.literal(true),
+    })).mutation(async ({ ctx, input }) => {
+      const { containsNoPatientData: _confirmation, ...feedback } = input;
+      const id = await db.createBetaFeedback({ ...feedback, userId: ctx.user.id });
+      return { success: true, id };
+    }),
+  }),
   launch: router({
     joinHallWaitlist: publicProcedure.input(z.object({
       name: z.string().trim().min(2).max(100),
@@ -221,9 +250,11 @@ export const appRouter = router({
         await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans les 24 heures : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
       }
       if (!user) throw new Error("Erreur lors de la création du compte");
-      const token = await makeSessionToken(openId, input.name);
-      ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
-      return { success: true, user };
+      if (!ENV.emailVerificationEnforced) {
+        const token = await makeSessionToken(openId, input.name);
+        ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
+      }
+      return { success: true, user, requiresEmailVerification: ENV.emailVerificationEnforced };
     }),
     login: publicProcedure.input(z.object({
       email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
@@ -238,6 +269,10 @@ export const appRouter = router({
       if (!valid) {
         await db.logSecurityEvent(user.id, "login_failed", "Mot de passe incorrect");
         throw new Error("Email ou mot de passe incorrect");
+      }
+      if (ENV.emailVerificationEnforced && !user.emailVerified) {
+        await db.logSecurityEvent(user.id, "login_blocked_unverified_email");
+        throw new TRPCError({ code: "FORBIDDEN", message: "Confirmez votre adresse e-mail avant de vous connecter." });
       }
       await db.logSecurityEvent(user.id, "login_success");
       const token = await makeSessionToken(user.openId, user.name || "");
@@ -271,6 +306,18 @@ export const appRouter = router({
       await db.verifyUserEmail(accountToken.userId);
       await db.logSecurityEvent(accountToken.userId, "email_verified");
       return { success: true };
+    }),
+    resendVerification: publicProcedure.input(z.object({
+      email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
+    })).mutation(async ({ ctx, input }) => {
+      const user = await db.getUserByEmail(input.email);
+      if (user && !user.emailVerified) {
+        const verificationToken = nanoid(48);
+        await db.createAccountToken(user.id, "email_verification", hashAccountToken(verificationToken), new Date(Date.now() + 24 * 60 * 60 * 1000));
+        await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans les 24 heures : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
+        await db.logSecurityEvent(user.id, "email_verification_resent");
+      }
+      return { success: true, message: "Si ce compte existe et doit être confirmé, un nouvel e-mail a été envoyé." };
     }),
   }),
 
@@ -1519,11 +1566,11 @@ export const appRouter = router({
       return db.getPersonalPatient(input.id, ctx.user.id);
     }),
     create: protectedProcedure.input(z.object({
-      firstName: z.string().min(1),
-      lastName: z.string().min(1),
-      dateOfBirth: z.string().optional(),
+      firstName: GIVEN_NAME_PREFIX_INPUT,
+      lastName: INITIAL_INPUT,
+      age: z.number().int().min(0).max(130),
+      fictitiousDataConfirmed: z.boolean().default(false),
       gender: z.enum(["M", "F"]).default("M"),
-      phone: z.string().optional(),
       status: z.enum(["stable", "modere", "critique"]).default("stable"),
       diagnosis: z.string().optional(),
       allergies: z.string().optional(),
@@ -1532,24 +1579,37 @@ export const appRouter = router({
       bedNumber: z.number().optional(),
       encounterType: z.enum(["consultation", "hospitalisation"]).default("hospitalisation"),
     })).mutation(async ({ ctx, input }) => {
+      if (ENV.betaMode && !input.fictitiousDataConfirmed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Pendant la bêta, vous devez confirmer que le patient et toutes les données sont entièrement fictifs.",
+        });
+      }
       await requireCarnetCapacity(ctx.user.id, input.serviceName);
-      return db.createPersonalPatient({ ...input, userId: ctx.user.id });
+      const { fictitiousDataConfirmed: _confirmation, ...patientData } = input;
+      return db.createPersonalPatient({ ...patientData, userId: ctx.user.id });
     }),
     importFromCollective: protectedProcedure.input(z.object({
       patientId: z.number(), encounterType: z.enum(["consultation", "hospitalisation"]).default("hospitalisation"),
     })).mutation(async ({ ctx, input }) => {
+      if (ENV.betaMode) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "L’import d’un patient réel depuis le Hall est désactivé pendant la bêta.",
+        });
+      }
       const patient = await requirePatientAccess(input.patientId, ctx.user.id);
       const existingId = await db.personalPatientExistsForSource(ctx.user.id, patient.id);
       if (existingId) return { id: existingId, alreadyExists: true };
       const service = await db.getServiceById(patient.serviceId);
       await requireCarnetCapacity(ctx.user.id, service?.name);
-      const firstInitial = patient.firstName.trim().charAt(0).toUpperCase();
+      const firstPrefix = patient.firstName.trim().slice(0, 2);
       const lastInitial = patient.lastName.trim().charAt(0).toUpperCase();
-      const anonymousCode = `${firstInitial}.${lastInitial}.-${String(patient.id).padStart(3, "0")}`;
       const id = await db.createPersonalPatient({
-        userId: ctx.user.id, firstName: firstInitial, lastName: lastInitial,
+        userId: ctx.user.id, firstName: firstPrefix, lastName: lastInitial,
+        age: ageFromDateOfBirth(patient.dateOfBirth),
         gender: patient.gender || "M", status: patient.status, diagnosis: patient.diagnosis || undefined,
-        serviceName: service?.name, encounterType: input.encounterType, anonymousCode, sourcePatientId: patient.id,
+        serviceName: service?.name, encounterType: input.encounterType, sourcePatientId: patient.id,
       });
       return { id, alreadyExists: false };
     }),

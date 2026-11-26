@@ -82,7 +82,9 @@ export default function PersonalPatientView() {
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="font-bold text-base truncate">{patient.firstName} {patient.lastName}</h1>
+            <h1 className="font-bold text-base truncate">
+              {patient.firstName} {patient.lastName} · {patient.age != null ? `${patient.age} ans` : "âge non renseigné"} · {patient.anonymousCode || `CAS-${String(patient.id).padStart(4, "0")}`}
+            </h1>
             <span className="flex items-center gap-1 text-[10px] font-semibold uppercase">
               <Lock className="w-3 h-3 text-muted-foreground" />
               <span className="text-muted-foreground">Personnel</span>

@@ -5,9 +5,11 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/HomeLaunch";
-import { HALL_SERVICE_ENABLED } from "./lib/features";
+import { BETA_MODE, HALL_SERVICE_ENABLED } from "./lib/features";
 import { lazy, Suspense } from "react";
 import PwaStatus from "./components/PwaStatus";
+import BetaBanner from "./components/BetaBanner";
+import BetaFeedback from "./components/BetaFeedback";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -70,7 +72,11 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <PwaStatus />
-          <Router />
+          <BetaBanner />
+          <BetaFeedback />
+          <div className={BETA_MODE ? "pt-12" : undefined}>
+            <Router />
+          </div>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

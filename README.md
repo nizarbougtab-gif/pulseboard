@@ -23,8 +23,8 @@ PulseBoard est une Progressive Web App (PWA) qui aide les médecins, internes, r
 |--------|-------------|
 | Frontend | React 19 + TypeScript + Tailwind 4 |
 | Backend | Express 4 + tRPC 11 |
-| Base de données | MySQL + Drizzle ORM |
-| Auth | OAuth via Manus |
+| Base de données | PostgreSQL + Drizzle ORM (`postgres-js`) |
+| Authentification | Compte local par e-mail et mot de passe, session signée côté serveur (JWT en cookie HTTP-only) |
 | PWA | manifest.json + Service Worker |
 
 ---
@@ -34,7 +34,7 @@ PulseBoard est une Progressive Web App (PWA) qui aide les médecins, internes, r
 ### Prérequis
 - Node.js 20+
 - pnpm 10+
-- MySQL 8+
+- PostgreSQL 15+ (ou Docker Compose)
 
 ### Installation
 
@@ -44,7 +44,7 @@ pnpm install
 
 # 2. Copier et configurer les variables d'environnement
 cp .env.example .env
-# Renseigner DATABASE_URL, VITE_OAUTH_PORTAL_URL, VITE_APP_ID
+# Renseigner DATABASE_URL et JWT_SECRET
 
 # 3. Pousser le schéma en base
 pnpm db:push
@@ -80,6 +80,12 @@ Le serveur démarre sur `http://localhost:3000`. Les hôpitaux sénégalais sont
 ```
 
 ---
+
+## Authentification et dépendance à Manus
+
+La connexion et l'inscription actuellement utilisées par PulseBoard sont locales : l'application stocke un mot de passe haché avec bcrypt, puis remet un cookie de session signé par le serveur. La connexion OAuth Manus n'est pas nécessaire pour ces parcours ; les anciennes routes OAuth sont désactivées. Le code contient encore des modules d'infrastructure hérités de Manus pour certains services auxiliaires, mais ils ne constituent pas le fournisseur d'identité utilisé par l'écran de connexion.
+
+Avant un déploiement destiné à des utilisateurs réels, il faudra auditer la gestion des sessions et des mots de passe, vérifier l'envoi et l'application effective de la confirmation d'e-mail, et documenter les responsabilités d'hébergement et de traitement des identités. Un remplacement par Better Auth ou un autre fournisseur reste une option d'évolution, pas une dépendance requise par l'authentification actuelle.
 
 ## Déploiement
 

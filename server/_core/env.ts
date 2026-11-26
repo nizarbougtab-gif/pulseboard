@@ -10,6 +10,8 @@ export const ENV = {
   publicAppUrl: process.env.PUBLIC_APP_URL ?? "",
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   emailFrom: process.env.EMAIL_FROM ?? "PulseBoard <onboarding@resend.dev>",
+  emailVerificationEnforced: process.env.EMAIL_VERIFICATION_ENFORCED === "true",
+  betaMode: process.env.BETA_MODE !== "false",
   wavePaymentLink: process.env.WAVE_PAYMENT_LINK ?? "",
   billingEnforced: process.env.BILLING_ENFORCED === "true",
   hallServiceEnabled: process.env.HALL_SERVICE_ENABLED === "true",

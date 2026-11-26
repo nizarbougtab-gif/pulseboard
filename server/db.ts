@@ -3,8 +3,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, subscriptions, payments, hallWaitlist, accountTokens, securityEvents, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
-import { patientInitials } from "../shared/patientIdentity";
+import { InsertUser, users, subscriptions, payments, hallWaitlist, accountTokens, securityEvents, betaFeedback, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { patientGivenNameAbbreviation, patientInitials } from "../shared/patientIdentity";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
 
@@ -175,10 +175,16 @@ export async function logSecurityEvent(userId: number | null, eventType: string,
   await db.insert(securityEvents).values({ userId: userId ?? undefined, eventType, details });
 }
 
+export async function createBetaFeedback(data: { userId: number; category: "bug" | "idee" | "facilite" | "autre"; rating: number; message: string }) {
+  const db = getDb();
+  const [{ id }] = await db.insert(betaFeedback).values(data).returning({ id: betaFeedback.id });
+  return id;
+}
+
 export async function getPersonalDataExport(userId: number) {
   const db = getDb();
   const [profile] = await db.select({ id: users.id, name: users.name, email: users.email, medicalRole: users.medicalRole, hospitalId: users.hospitalId, createdAt: users.createdAt }).from(users).where(eq(users.id, userId));
-  const [plan, userRotations, userCompetences, userProcedures, cases, notes, tasks, vitals, observations] = await Promise.all([
+  const [plan, userRotations, userCompetences, userProcedures, cases, notes, tasks, vitals, observations, feedback] = await Promise.all([
     getSubscription(userId),
     db.select().from(rotations).where(eq(rotations.userId, userId)),
     db.select().from(competences).where(eq(competences.userId, userId)),
@@ -188,8 +194,9 @@ export async function getPersonalDataExport(userId: number) {
     db.select().from(personalTasks).where(eq(personalTasks.userId, userId)),
     db.select().from(personalVitals).where(eq(personalVitals.userId, userId)),
     db.select().from(personalObservations).where(eq(personalObservations.userId, userId)),
+    db.select().from(betaFeedback).where(eq(betaFeedback.userId, userId)),
   ]);
-  return { exportedAt: new Date().toISOString(), profile, subscription: plan, carnet: { rotations: userRotations, competences: userCompetences, procedures: userProcedures, cases: cases.map(anonymizePersonalPatient), notes, tasks, vitals, observations } };
+  return { exportedAt: new Date().toISOString(), profile, subscription: plan, betaFeedback: feedback, carnet: { rotations: userRotations, competences: userCompetences, procedures: userProcedures, cases: cases.map(anonymizePersonalPatient), notes, tasks, vitals, observations } };
 }
 
 // ===== HOSPITALS =====
@@ -1216,7 +1223,7 @@ export async function userHasServiceMembership(userId: number) {
 }
 
 function anonymizePersonalPatient<T extends { firstName: string; lastName: string; dateOfBirth?: string | null; phone?: string | null }>(patient: T) {
-  return { ...patient, firstName: toInitial(patient.firstName), lastName: toInitial(patient.lastName), dateOfBirth: null, phone: null };
+  return { ...patient, firstName: patientGivenNameAbbreviation(patient.firstName), lastName: toInitial(patient.lastName), dateOfBirth: null, phone: null };
 }
 
 export async function getPersonalPatients(userId: number) {
@@ -1234,15 +1241,20 @@ export async function getPersonalPatient(id: number, userId: number) {
   return p ? anonymizePersonalPatient(p) : undefined;
 }
 
-export async function createPersonalPatient(data: { userId: number; firstName: string; lastName: string; dateOfBirth?: string; gender?: "M" | "F"; phone?: string; status?: "stable" | "modere" | "critique"; diagnosis?: string; allergies?: string; antecedents?: string; serviceName?: string; bedNumber?: number; encounterType?: "consultation" | "hospitalisation"; anonymousCode?: string; sourcePatientId?: number }) {
+export async function createPersonalPatient(data: { userId: number; firstName: string; lastName: string; age?: number; gender?: "M" | "F"; status?: "stable" | "modere" | "critique"; diagnosis?: string; allergies?: string; antecedents?: string; serviceName?: string; bedNumber?: number; encounterType?: "consultation" | "hospitalisation"; anonymousCode?: string; sourcePatientId?: number }) {
   const db = getDb();
   const [{ id }] = await db.insert(personalPatients).values({
     ...data,
-    firstName: toInitial(data.firstName),
+    firstName: patientGivenNameAbbreviation(data.firstName),
     lastName: toInitial(data.lastName),
     dateOfBirth: undefined,
     phone: undefined,
   }).returning({ id: personalPatients.id });
+  if (!data.anonymousCode) {
+    await db.update(personalPatients)
+      .set({ anonymousCode: `CAS-${String(id).padStart(4, "0")}` })
+      .where(eq(personalPatients.id, id));
+  }
   return id;
 }
 

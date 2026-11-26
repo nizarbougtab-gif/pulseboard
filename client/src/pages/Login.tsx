@@ -17,12 +17,14 @@ export default function Login() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [loginMessage, setLoginMessage] = useState("");
 
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regRole, setRegRole] = useState<"externe" | "interne" | "resident" | "medecin">("interne");
   const [regError, setRegError] = useState("");
+  const [regMessage, setRegMessage] = useState("");
   const [accepted, setAccepted] = useState(false);
 
   const loginMutation = trpc.auth.login.useMutation({
@@ -34,11 +36,24 @@ export default function Login() {
   });
 
   const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (data.requiresEmailVerification) {
+        setRegPassword("");
+        setRegMessage("Compte créé. Consultez votre messagerie et confirmez votre adresse avant de vous connecter.");
+        return;
+      }
       await utils.auth.me.invalidate();
       navigate("/mon-stage");
     },
     onError: (err) => setRegError(err.message),
+  });
+
+  const resendVerification = trpc.auth.resendVerification.useMutation({
+    onSuccess: data => {
+      setLoginMessage(data.message);
+      setRegMessage(data.message);
+    },
+    onError: error => setLoginError(error.message),
   });
 
   return (
@@ -65,6 +80,7 @@ export default function Login() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     setLoginError("");
+                    setLoginMessage("");
                     loginMutation.mutate({ email: loginEmail, password: loginPassword });
                   }}
                   className="space-y-4"
@@ -94,6 +110,17 @@ export default function Login() {
                     />
                   </div>
                   {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+                  {loginMessage && <p className="text-sm text-[var(--pulseboard-green)]" role="status">{loginMessage}</p>}
+                  {loginError.includes("Confirmez votre adresse") && (
+                    <button
+                      type="button"
+                      className="text-sm text-[var(--pulseboard-green)] hover:underline disabled:opacity-50"
+                      disabled={!loginEmail || resendVerification.isPending}
+                      onClick={() => resendVerification.mutate({ email: loginEmail })}
+                    >
+                      {resendVerification.isPending ? "Envoi…" : "Renvoyer l’e-mail de confirmation"}
+                    </button>
+                  )}
                   <Button
                     type="submit"
                     className="w-full bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white"
@@ -110,13 +137,14 @@ export default function Login() {
             <Card>
               <CardHeader>
                 <CardTitle>Créer un compte</CardTitle>
-                <CardDescription>Rejoignez votre équipe sur PulseBoard</CardDescription>
+                <CardDescription>Créez votre carnet de stage personnel</CardDescription>
               </CardHeader>
               <CardContent>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
                     setRegError("");
+                    setRegMessage("");
                     if (!accepted) return setRegError("Vous devez accepter les conditions et la politique de confidentialité.");
                     if (!window.confirm("Confirmez-vous ce rôle médical ? Il sera verrouillé après la création du compte. Toute correction devra être validée et restera tracée.")) return;
                     registerMutation.mutate({ name: regName, email: regEmail, password: regPassword, medicalRole: regRole, acceptTerms: true, acceptPrivacy: true });
@@ -179,6 +207,17 @@ export default function Login() {
                     <p className="text-xs text-muted-foreground">Ce choix sera verrouillé après l’inscription. Une correction nécessitera une demande validée.</p>
                   </div>
                   {regError && <p className="text-sm text-destructive">{regError}</p>}
+                  {regMessage && <p className="text-sm text-[var(--pulseboard-green)]" role="status">{regMessage}</p>}
+                  {regMessage && (
+                    <button
+                      type="button"
+                      className="text-sm text-[var(--pulseboard-green)] hover:underline disabled:opacity-50"
+                      disabled={!regEmail || resendVerification.isPending}
+                      onClick={() => resendVerification.mutate({ email: regEmail })}
+                    >
+                      Renvoyer l’e-mail de confirmation
+                    </button>
+                  )}
                   <Button
                     type="submit"
                     className="w-full bg-[var(--pulseboard-green)] hover:bg-[var(--pulseboard-green-dark)] text-white"

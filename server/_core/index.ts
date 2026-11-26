@@ -36,6 +36,11 @@ async function startServer() {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
       throw new Error("JWT_SECRET doit contenir au moins 32 caractères en production");
     }
+    if (ENV.emailVerificationEnforced) {
+      if (!ENV.resendApiKey) throw new Error("RESEND_API_KEY est requis lorsque EMAIL_VERIFICATION_ENFORCED=true");
+      if (!ENV.publicAppUrl) throw new Error("PUBLIC_APP_URL est requis lorsque EMAIL_VERIFICATION_ENFORCED=true");
+      if (!process.env.EMAIL_FROM) throw new Error("EMAIL_FROM est requis lorsque EMAIL_VERIFICATION_ENFORCED=true");
+    }
   }
 
   // Migrations automatiques au démarrage
@@ -68,7 +73,7 @@ async function startServer() {
   });
 
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-  app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword"], (req, res, next) => {
+  app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword", "/api/trpc/auth.resendVerification"], (req, res, next) => {
     const now = Date.now();
     const key = req.ip || req.socket.remoteAddress || "unknown";
     const current = loginAttempts.get(key);

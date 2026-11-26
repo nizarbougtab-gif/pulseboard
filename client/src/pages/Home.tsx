@@ -13,7 +13,7 @@ const features = [
   { icon: Bed, title: "Le service en un regard", text: "Lits, consultations, patients critiques et sorties prévues réunis dans une vue mobile." },
   { icon: FileClock, title: "Une relève qui garde la mémoire", text: "Les événements de la garde sont structurés, horodatés et préparés pour l’équipe suivante." },
   { icon: MessageSquareText, title: "Des échanges reliés au patient", text: "Messages, alertes et décisions restent dans le contexte clinique au lieu de se perdre dans une conversation générale." },
-  { icon: BookOpen, title: "Un carnet de stage personnel", text: "Cas anonymisés, gestes, notes et progression restent séparés du dossier collectif du service." },
+  { icon: BookOpen, title: "Un carnet de stage personnel", text: "Cas pseudonymisés, gestes, notes et progression restent séparés du dossier collectif du service." },
   { icon: ClipboardCheck, title: "Des décisions traçables", text: "Les propositions, validations, refus et tâches terminées conservent leur auteur et leur date." },
   { icon: ShieldCheck, title: "Des droits selon le rôle", text: "Externe, interne, résident et médecin n’ont accès qu’aux actions correspondant à leurs responsabilités." },
 ];
@@ -24,7 +24,7 @@ const plans = [
     price: "0 FCFA",
     period: "",
     description: "Pour découvrir le carnet sans engagement et commencer à documenter son stage.",
-    features: ["3 cas anonymisés maximum", "1 service ou rotation", "Notes et gestes", "Lecture permanente des cas enregistrés", "Accès mobile PWA"],
+    features: ["3 cas pseudonymisés maximum", "1 service ou rotation", "Notes et gestes", "Lecture permanente des cas enregistrés", "Accès mobile PWA"],
     action: "Commencer gratuitement",
   },
   {
@@ -32,7 +32,7 @@ const plans = [
     price: "3 500 FCFA",
     period: "/ mois",
     description: "Pour les étudiants et professionnels qui veulent construire un carnet complet sans limite.",
-    features: ["Cas anonymisés illimités", "Services et rotations multiples", "Gestes, notes et compétences", "Exports PDF et Excel", "Sauvegarde continue du carnet", "35 000 FCFA par an"],
+    features: ["Cas pseudonymisés illimités", "Services et rotations multiples", "Gestes, notes et compétences", "Exports PDF et Excel", "Sauvegarde continue du carnet", "35 000 FCFA par an"],
     action: "Choisir Carnet Pro",
     highlighted: true,
   },
@@ -94,7 +94,7 @@ export default function Home() {
                 <Button size="lg" variant="outline" className="h-12 px-7" asChild><a href="#produit">Découvrir le produit</a></Button>
               </div>
               <div className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
-                <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-700"/>3 cas anonymisés gratuits</span>
+                <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-700"/>3 cas pseudonymisés gratuits</span>
                 <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-700"/>Installation PWA</span>
                 <span className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-700"/>Sans carte bancaire</span>
               </div>
@@ -140,9 +140,9 @@ export default function Home() {
             <div>
               <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300"><BookOpen className="h-6 w-6"/></span>
               <h2 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">Le carnet qui se construit pendant que vous travaillez.</h2>
-              <p className="mt-5 max-w-xl leading-7 text-slate-300">Importez un cas sous forme anonymisée, documentez les gestes réalisés et gardez vos apprentissages dans un espace personnel séparé du service.</p>
+              <p className="mt-5 max-w-xl leading-7 text-slate-300">Importez un cas sous forme pseudonymisée, documentez les gestes réalisés et gardez vos apprentissages dans un espace personnel séparé du service.</p>
               <ul className="mt-8 space-y-4 text-sm text-slate-200">
-                {['Patients identifiés uniquement par leurs initiales','Gestes observés, supervisés ou réalisés en autonomie','Notes de stage et cas cliniques structurés','Historique personnel conservé entre les rotations'].map(item=><li key={item} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300"/>{item}</li>)}
+                {['Patients repérés par une abréviation, leur âge et un code de cas','Gestes observés, supervisés ou réalisés en autonomie','Notes de stage et cas cliniques structurés','Historique personnel conservé entre les rotations'].map(item=><li key={item} className="flex gap-3"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300"/>{item}</li>)}
               </ul>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur sm:p-7">
@@ -154,7 +154,7 @@ export default function Home() {
         </section>
 
         <section id="tarifs" className="container py-20 lg:py-28">
-          <div className="mx-auto max-w-2xl text-center"><p className="text-xs font-bold uppercase tracking-[.22em] text-emerald-700">Lancement Sénégal</p><h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Commencez gratuitement, payez selon votre usage</h2><p className="mt-4 text-slate-600">Testez le carnet avec 3 cas anonymisés. Passez ensuite au carnet illimité ou rejoignez le hall collectif de votre service.</p></div>
+          <div className="mx-auto max-w-2xl text-center"><p className="text-xs font-bold uppercase tracking-[.22em] text-emerald-700">Lancement Sénégal</p><h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Commencez gratuitement, payez selon votre usage</h2><p className="mt-4 text-slate-600">Testez le carnet avec 3 cas pseudonymisés. Passez ensuite au carnet illimité ou rejoignez le hall collectif de votre service.</p></div>
           <div className="mx-auto mt-14 grid max-w-5xl gap-5 lg:grid-cols-3">
             {plans.map(plan=><article key={plan.name} className={`relative flex flex-col rounded-2xl border p-6 ${plan.highlighted?'border-emerald-700 bg-emerald-800 text-white shadow-xl shadow-emerald-900/15':'border-slate-200 bg-white'}`}>{plan.highlighted&&<span className="absolute -top-3 left-6 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-950">Recommandé</span>}<h3 className="text-lg font-bold">{plan.name}</h3><p className={`mt-2 min-h-12 text-sm ${plan.highlighted?'text-emerald-100':'text-slate-600'}`}>{plan.description}</p><div className="mt-6"><span className="text-3xl font-bold">{plan.price}</span><span className={`ml-1 text-xs ${plan.highlighted?'text-emerald-100':'text-slate-500'}`}>{plan.period}</span></div><ul className="my-7 flex-1 space-y-3">{plan.features.map(item=><li key={item} className="flex gap-2 text-sm"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${plan.highlighted?'text-emerald-200':'text-emerald-700'}`}/>{item}</li>)}</ul><Button className={plan.highlighted?'bg-white text-emerald-800 hover:bg-emerald-50':'bg-emerald-700 text-white hover:bg-emerald-800'} asChild><a href={appUrl}>{plan.action}</a></Button></article>)}
           </div>
