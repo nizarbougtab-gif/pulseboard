@@ -73,6 +73,13 @@ async function startServer() {
   });
 
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+  const rateLimitCleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, attempt] of loginAttempts) {
+      if (attempt.resetAt <= now) loginAttempts.delete(key);
+    }
+  }, 15 * 60_000);
+  rateLimitCleanup.unref();
   app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword", "/api/trpc/auth.resendVerification"], (req, res, next) => {
     const now = Date.now();
     const key = req.ip || req.socket.remoteAddress || "unknown";

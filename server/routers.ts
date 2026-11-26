@@ -23,6 +23,12 @@ const GIVEN_NAME_PREFIX_INPUT = z.string()
   .trim()
   .refine(isPatientGivenNamePrefix, "Saisissez les deux premières lettres du prénom");
 
+// Never return authentication internals (password hashes or identity keys) to the browser.
+export function safeAuthUser<T extends { passwordHash?: unknown; openId?: unknown }>(user: T) {
+  const { passwordHash: _passwordHash, openId: _openId, ...publicUser } = user;
+  return publicUser;
+}
+
 function ageFromDateOfBirth(value: string | null | undefined) {
   if (!value) return undefined;
   const [year, month, day] = value.split("-").map(Number);
@@ -227,7 +233,7 @@ export const appRouter = router({
     }),
   }),
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => opts.ctx.user ? safeAuthUser(opts.ctx.user) : null),
     register: publicProcedure.input(z.object({
       name: z.string().trim().min(2).max(100),
       email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
@@ -246,15 +252,15 @@ export const appRouter = router({
       if (user) {
         await db.createDefaultSubscription(user.id);
         const verificationToken = nanoid(48);
-        await db.createAccountToken(user.id, "email_verification", hashAccountToken(verificationToken), new Date(Date.now() + 24 * 60 * 60 * 1000));
-        await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans les 24 heures : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
+        await db.createAccountToken(user.id, "email_verification", hashAccountToken(verificationToken), new Date(Date.now() + 60 * 60 * 1000));
+        await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans l'heure : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
       }
       if (!user) throw new Error("Erreur lors de la création du compte");
       if (!ENV.emailVerificationEnforced) {
         const token = await makeSessionToken(openId, input.name);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
       }
-      return { success: true, user, requiresEmailVerification: ENV.emailVerificationEnforced };
+      return { success: true, user: safeAuthUser(user), requiresEmailVerification: ENV.emailVerificationEnforced };
     }),
     login: publicProcedure.input(z.object({
       email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
@@ -277,7 +283,7 @@ export const appRouter = router({
       await db.logSecurityEvent(user.id, "login_success");
       const token = await makeSessionToken(user.openId, user.name || "");
       ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
-      return { success: true, user };
+      return { success: true, user: safeAuthUser(user) };
     }),
     logout: publicProcedure.mutation(({ ctx }) => {
       ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
@@ -313,8 +319,8 @@ export const appRouter = router({
       const user = await db.getUserByEmail(input.email);
       if (user && !user.emailVerified) {
         const verificationToken = nanoid(48);
-        await db.createAccountToken(user.id, "email_verification", hashAccountToken(verificationToken), new Date(Date.now() + 24 * 60 * 60 * 1000));
-        await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans les 24 heures : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
+        await db.createAccountToken(user.id, "email_verification", hashAccountToken(verificationToken), new Date(Date.now() + 60 * 60 * 1000));
+        await sendAccountEmail(input.email, "Confirmez votre adresse PulseBoard", `Confirmez votre adresse dans l'heure : ${publicAppUrl(ctx.req)}/verify-email?token=${verificationToken}`).catch(error => console.warn("[PulseBoard] Email de vérification non envoyé:", error.message));
         await db.logSecurityEvent(user.id, "email_verification_resent");
       }
       return { success: true, message: "Si ce compte existe et doit être confirmé, un nouvel e-mail a été envoyé." };

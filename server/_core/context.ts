@@ -12,6 +12,10 @@ export type TrpcContext = {
   user: User | null;
 };
 
+export function canUseSession(user: Pick<User, "emailVerified"> | null, verificationEnforced: boolean) {
+  return Boolean(user && (!verificationEnforced || user.emailVerified));
+}
+
 export async function createContext(opts: CreateExpressContextOptions): Promise<TrpcContext> {
   let user: User | null = null;
   try {
@@ -26,7 +30,9 @@ export async function createContext(opts: CreateExpressContextOptions): Promise<
         audience: "pulseboard-web",
       });
       if (payload.openId) {
-        user = (await getUserByOpenId(payload.openId as string)) ?? null;
+        const sessionUser = await getUserByOpenId(payload.openId as string);
+        // Turning email verification on must also invalidate old, unverified sessions.
+        user = canUseSession(sessionUser, ENV.emailVerificationEnforced) ? sessionUser : null;
       }
     }
   } catch {
