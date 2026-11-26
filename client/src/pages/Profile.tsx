@@ -54,6 +54,14 @@ export default function Profile() {
     onError: error => toast.error(error.message),
   });
   const deletion = trpc.account.requestDeletion.useMutation({ onSuccess: data => toast.success(data.message), onError: error => toast.error(error.message) });
+  const revokeSessions = trpc.auth.logoutEverywhere.useMutation({
+    onSuccess: () => {
+      utils.auth.me.setData(undefined, null);
+      toast.success("Toutes les sessions ont été invalidées. Reconnectez-vous sur cet appareil.");
+      navigate(getLoginUrl());
+    },
+    onError: error => toast.error(error.message),
+  });
   const requestRoleChange = trpc.profile.requestRoleChange.useMutation({
     onSuccess: () => {
       utils.profile.roleStatus.invalidate();
@@ -182,6 +190,7 @@ export default function Profile() {
               <Button variant="outline" className="w-full justify-start" disabled={exportData.isPending} onClick={() => exportData.mutate()}><Download className="w-4 h-4 mr-2" />Exporter les données de mon carnet</Button>
               <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled={deletion.isPending} onClick={() => { if (window.confirm("Demander la suppression de votre compte ? Cette demande sera vérifiée avant exécution.")) deletion.mutate({ confirmation: "SUPPRIMER" }); }}><Trash2 className="w-4 h-4 mr-2" />Demander la suppression du compte</Button>
               <Button variant="outline" className="w-full justify-start" onClick={() => logout()}><LogOut className="w-4 h-4 mr-2" />Se déconnecter</Button>
+              <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive" disabled={revokeSessions.isPending} onClick={() => { if (window.confirm("Déconnecter PulseBoard de tous vos appareils ? Vous devrez vous reconnecter ici.")) revokeSessions.mutate(); }}><LogOut className="w-4 h-4 mr-2" />Déconnecter tous les appareils</Button>
               <p className="text-xs text-muted-foreground">Consultez aussi la <a className="underline" href="/privacy">politique de confidentialité</a> et les <a className="underline" href="/terms">conditions d'utilisation</a>.</p>
             </div>
           </CardContent>

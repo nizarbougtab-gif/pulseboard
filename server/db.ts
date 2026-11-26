@@ -1,4 +1,4 @@
-import { eq, asc, desc, count, and, isNull, inArray } from "drizzle-orm";
+import { eq, asc, desc, count, and, isNull, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
@@ -157,7 +157,19 @@ export async function consumeAccountToken(tokenHash: string, kind: "password_res
 
 export async function updatePassword(userId: number, passwordHash: string) {
   const db = getDb();
-  await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+  await db.update(users).set({
+    passwordHash,
+    sessionVersion: sql`${users.sessionVersion} + 1`,
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId));
+}
+
+export async function revokeAllUserSessions(userId: number) {
+  const db = getDb();
+  await db.update(users).set({
+    sessionVersion: sql`${users.sessionVersion} + 1`,
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId));
 }
 
 export async function verifyUserEmail(userId: number) {

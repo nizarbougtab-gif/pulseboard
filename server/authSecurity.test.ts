@@ -8,6 +8,7 @@ describe("authentication response safety", () => {
       id: 12,
       openId: "internal-user-key",
       passwordHash: "$2b$10$private-hash",
+      sessionVersion: 4,
       email: "clinician@example.test",
       name: "Clinician",
       medicalRole: "interne",
@@ -24,9 +25,11 @@ describe("authentication response safety", () => {
   });
 
   it("rejects old unverified sessions when email verification is enforced", () => {
-    expect(canUseSession({ emailVerified: false }, true)).toBe(false);
-    expect(canUseSession({ emailVerified: true }, true)).toBe(true);
-    expect(canUseSession({ emailVerified: false }, false)).toBe(true);
+    expect(canUseSession({ emailVerified: false, sessionVersion: 0 }, true)).toBe(false);
+    expect(canUseSession({ emailVerified: true, sessionVersion: 0 }, true)).toBe(true);
+    expect(canUseSession({ emailVerified: false, sessionVersion: 0 }, false)).toBe(true);
+    expect(canUseSession({ emailVerified: true, sessionVersion: 1 }, false, 0)).toBe(false);
+    expect(canUseSession({ emailVerified: true, sessionVersion: 1 }, false, 1)).toBe(true);
     expect(canUseSession(null, false)).toBe(false);
   });
 });

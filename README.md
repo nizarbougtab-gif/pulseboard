@@ -85,6 +85,8 @@ Le serveur démarre sur `http://localhost:3000`. Les hôpitaux sénégalais sont
 
 La connexion et l'inscription actuellement utilisées par PulseBoard sont locales : l'application stocke un mot de passe haché avec bcrypt, puis remet un cookie de session signé par le serveur. La connexion OAuth Manus n'est pas nécessaire pour ces parcours ; les anciennes routes OAuth sont désactivées. Le code contient encore des modules d'infrastructure hérités de Manus pour certains services auxiliaires, mais ils ne constituent pas le fournisseur d'identité utilisé par l'écran de connexion.
 
+Les sessions expirent après 12 heures. Un changement de mot de passe ou l'action « Déconnecter tous les appareils » incrémente la version de session du compte et invalide les anciens jetons côté serveur.
+
 Avant un déploiement destiné à des utilisateurs réels, il faudra auditer la gestion des sessions et des mots de passe, vérifier l'envoi et l'application effective de la confirmation d'e-mail, et documenter les responsabilités d'hébergement et de traitement des identités. Un remplacement par Better Auth ou un autre fournisseur reste une option d'évolution, pas une dépendance requise par l'authentification actuelle.
 
 ## Déploiement

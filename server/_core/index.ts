@@ -8,7 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { seedHospitalsIfEmpty, runMigrations, ensureConfiguredAdmins } from "../db";
+import { seedHospitalsIfEmpty, runMigrations, ensureConfiguredAdmins, logSecurityEvent } from "../db";
 import { ENV } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -72,7 +72,7 @@ async function startServer() {
     next();
   });
 
-  const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+  const loginAttempts = new Map<string, { count: number; resetAt: number; blockedEventLogged?: boolean }>();
   const rateLimitCleanup = setInterval(() => {
     const now = Date.now();
     for (const [key, attempt] of loginAttempts) {
@@ -90,6 +90,12 @@ async function startServer() {
     }
     if (current.count >= 10) {
       res.setHeader("Retry-After", String(Math.ceil((current.resetAt - now) / 1000)));
+      if (!current.blockedEventLogged) {
+        current.blockedEventLogged = true;
+        void logSecurityEvent(null, "auth_rate_limited").catch(error => {
+          console.warn("[PulseBoard] Événement de limitation non journalisé:", (error as Error).message);
+        });
+      }
       return res.status(429).json({ error: "Trop de tentatives. Réessayez dans quelques minutes." });
     }
     current.count += 1;

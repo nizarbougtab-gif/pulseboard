@@ -99,6 +99,13 @@
       "when": 1790294400000,
       "tag": "0013_beta_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795737600000,
+      "tag": "0014_revocable_sessions",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   email: text("email"),
   emailVerified: boolean("emailVerified").default(false).notNull(),
   emailVerifiedAt: timestamp("emailVerifiedAt"),
+  sessionVersion: integer("sessionVersion").default(0).notNull(),
   passwordHash: text("passwordHash"),
   loginMethod: text("loginMethod"),
   role: text("role").$type<"user" | "admin">().default("user").notNull(),

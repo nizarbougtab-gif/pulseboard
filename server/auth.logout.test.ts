@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+import * as db from "./db";
 
 type CookieCall = {
   name: string;
@@ -20,6 +21,7 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
     name: "Sample User",
     loginMethod: "manus",
     role: "user",
+    sessionVersion: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -58,5 +60,17 @@ describe("auth.logout", () => {
       httpOnly: true,
       path: "/",
     });
+  });
+
+  it("revokes all sessions server-side before clearing the current cookie", async () => {
+    const { ctx, clearedCookies } = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await caller.auth.logoutEverywhere();
+
+    expect(db.revokeAllUserSessions).toHaveBeenCalledWith(1);
+    expect(db.logSecurityEvent).toHaveBeenCalledWith(1, "sessions_revoked", "Déconnexion de tous les appareils");
+    expect(clearedCookies).toHaveLength(1);
+    expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
   });
 });

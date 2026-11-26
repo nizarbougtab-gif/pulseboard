@@ -12,8 +12,16 @@ export type TrpcContext = {
   user: User | null;
 };
 
-export function canUseSession(user: Pick<User, "emailVerified"> | null, verificationEnforced: boolean) {
-  return Boolean(user && (!verificationEnforced || user.emailVerified));
+export function canUseSession(
+  user: Pick<User, "emailVerified" | "sessionVersion"> | null,
+  verificationEnforced: boolean,
+  tokenSessionVersion = 0,
+) {
+  return Boolean(
+    user &&
+    (!verificationEnforced || user.emailVerified) &&
+    user.sessionVersion === tokenSessionVersion,
+  );
 }
 
 export async function createContext(opts: CreateExpressContextOptions): Promise<TrpcContext> {
@@ -31,8 +39,9 @@ export async function createContext(opts: CreateExpressContextOptions): Promise<
       });
       if (payload.openId) {
         const sessionUser = await getUserByOpenId(payload.openId as string);
-        // Turning email verification on must also invalidate old, unverified sessions.
-        user = canUseSession(sessionUser, ENV.emailVerificationEnforced) ? sessionUser : null;
+        // Old tokens default to version 0; incrementing the user version revokes them.
+        const tokenSessionVersion = typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0;
+        user = canUseSession(sessionUser, ENV.emailVerificationEnforced, tokenSessionVersion) ? sessionUser : null;
       }
     }
   } catch {

@@ -13,4 +13,6 @@ vi.mock("./db", () => ({
   getPatientsByService: vi.fn(async () => []),
   createReleve: vi.fn(async () => 1),
   logActivity: vi.fn(async () => undefined),
+  logSecurityEvent: vi.fn(async () => undefined),
+  revokeAllUserSessions: vi.fn(async () => undefined),
 }));

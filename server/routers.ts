@@ -24,8 +24,8 @@ const GIVEN_NAME_PREFIX_INPUT = z.string()
   .refine(isPatientGivenNamePrefix, "Saisissez les deux premières lettres du prénom");
 
 // Never return authentication internals (password hashes or identity keys) to the browser.
-export function safeAuthUser<T extends { passwordHash?: unknown; openId?: unknown }>(user: T) {
-  const { passwordHash: _passwordHash, openId: _openId, ...publicUser } = user;
+export function safeAuthUser<T extends { passwordHash?: unknown; openId?: unknown; sessionVersion?: unknown }>(user: T) {
+  const { passwordHash: _passwordHash, openId: _openId, sessionVersion: _sessionVersion, ...publicUser } = user;
   return publicUser;
 }
 
@@ -73,12 +73,12 @@ function redactConsultationForMembership<T extends Record<string, any>>(consulta
   };
 }
 
-async function makeSessionToken(openId: string, name: string) {
+async function makeSessionToken(openId: string, name: string, sessionVersion = 0) {
   if (!ENV.cookieSecret || ENV.cookieSecret.length < 32) {
     throw new Error("JWT_SECRET doit contenir au moins 32 caractères");
   }
   const secret = new TextEncoder().encode(ENV.cookieSecret);
-  return new SignJWT({ openId, name })
+  return new SignJWT({ openId, name, sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setIssuer("pulseboard")
@@ -257,7 +257,7 @@ export const appRouter = router({
       }
       if (!user) throw new Error("Erreur lors de la création du compte");
       if (!ENV.emailVerificationEnforced) {
-        const token = await makeSessionToken(openId, input.name);
+        const token = await makeSessionToken(openId, input.name, user.sessionVersion);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
       }
       return { success: true, user: safeAuthUser(user), requiresEmailVerification: ENV.emailVerificationEnforced };
@@ -281,12 +281,18 @@ export const appRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "Confirmez votre adresse e-mail avant de vous connecter." });
       }
       await db.logSecurityEvent(user.id, "login_success");
-      const token = await makeSessionToken(user.openId, user.name || "");
+      const token = await makeSessionToken(user.openId, user.name || "", user.sessionVersion);
       ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: SESSION_MAX_AGE_MS });
       return { success: true, user: safeAuthUser(user) };
     }),
     logout: publicProcedure.mutation(({ ctx }) => {
       ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+      return { success: true } as const;
+    }),
+    logoutEverywhere: protectedProcedure.mutation(async ({ ctx }) => {
+      await db.revokeAllUserSessions(ctx.user.id);
+      ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+      await db.logSecurityEvent(ctx.user.id, "sessions_revoked", "Déconnexion de tous les appareils");
       return { success: true } as const;
     }),
     forgotPassword: publicProcedure.input(z.object({ email: z.string().trim().email().max(254).transform(value => value.toLowerCase()) })).mutation(async ({ ctx, input }) => {
