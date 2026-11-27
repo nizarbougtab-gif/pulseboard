@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { seedHospitalsIfEmpty, runMigrations, ensureConfiguredAdmins, cleanupStaleLoginAttempts } from "../db";
 import { ENV } from "./env";
 import { authLimiter } from "./rateLimit";
+import { applySecurityHeaders, enforceSameOriginApi } from "./security";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -63,25 +64,13 @@ async function startServer() {
   const server = createServer(app);
   app.disable("x-powered-by");
   if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
-  app.use((_req, res, next) => {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
-    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-    if (process.env.NODE_ENV === "production") {
-      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-      res.setHeader(
-        "Content-Security-Policy",
-        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self' data:; worker-src 'self' blob:"
-      );
-    }
-    next();
-  });
+  app.use(applySecurityHeaders);
+  app.use(enforceSameOriginApi);
 
   app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword", "/api/trpc/auth.resendVerification"], authLimiter);
 
-  app.use(express.json({ limit: "10mb" }));
-  app.use(express.urlencoded({ limit: "10mb", extended: true }));
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true, parameterLimit: 100 }));
   app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
