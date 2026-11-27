@@ -1,9 +1,9 @@
-import { eq, asc, desc, count, and, isNull, inArray, sql } from "drizzle-orm";
+import { eq, asc, desc, count, and, isNull, inArray, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import path from "path";
-import { InsertUser, users, subscriptions, payments, hallWaitlist, accountTokens, securityEvents, betaFeedback, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
+import { InsertUser, users, subscriptions, payments, hallWaitlist, accountTokens, securityEvents, loginAttempts, betaFeedback, medicalRoleChangeRequests, medicalRoleReviews, hospitals, services, serviceMembers, serviceInvitations, joinRequests, patients, patientTasks, alerts, serviceMessages, activityLog, careDecisionProposals, guards, guardMembers, guardAssignments, releves, consultations, clinicalNotes, vitalSigns, observations, rotations, competences, procedures, personalPatients, personalNotes, personalTasks, personalVitals, personalObservations } from "../drizzle/schema";
 import { patientGivenNameAbbreviation, patientInitials } from "../shared/patientIdentity";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/pulseboard";
@@ -185,6 +185,43 @@ export async function requestAccountDeletion(userId: number) {
 export async function logSecurityEvent(userId: number | null, eventType: string, details?: string) {
   const db = getDb();
   await db.insert(securityEvents).values({ userId: userId ?? undefined, eventType, details });
+}
+
+export async function getLoginAttemptLock(emailHash: string) {
+  const db = getDb();
+  const [record] = await db.select({ lockedUntil: loginAttempts.lockedUntil })
+    .from(loginAttempts).where(eq(loginAttempts.emailHash, emailHash));
+  return record ?? null;
+}
+
+export async function recordFailedLoginAttempt(emailHash: string) {
+  const db = getDb();
+  const windowExpired = sql`${loginAttempts.windowStartedAt} <= now() - interval '15 minutes'`;
+  const lockActive = sql`${loginAttempts.lockedUntil} > now()`;
+  const [record] = await db.insert(loginAttempts).values({ emailHash, attempts: 1 })
+    .onConflictDoUpdate({
+      target: loginAttempts.emailHash,
+      set: {
+        attempts: sql`CASE WHEN ${lockActive} THEN ${loginAttempts.attempts} WHEN ${windowExpired} THEN 1 ELSE ${loginAttempts.attempts} + 1 END`,
+        windowStartedAt: sql`CASE WHEN ${windowExpired} AND NOT (${lockActive}) THEN now() ELSE ${loginAttempts.windowStartedAt} END`,
+        lockedUntil: sql`CASE WHEN ${lockActive} THEN ${loginAttempts.lockedUntil} WHEN ${windowExpired} THEN NULL WHEN ${loginAttempts.attempts} + 1 >= 5 THEN now() + interval '15 minutes' ELSE NULL END`,
+        updatedAt: sql`now()`,
+      },
+    })
+    .returning({ attempts: loginAttempts.attempts, lockedUntil: loginAttempts.lockedUntil });
+  return record;
+}
+
+export async function resetLoginAttempts(emailHash: string) {
+  const db = getDb();
+  await db.update(loginAttempts).set({ attempts: 0, windowStartedAt: new Date(), lockedUntil: null, updatedAt: new Date() })
+    .where(eq(loginAttempts.emailHash, emailHash));
+}
+
+export async function cleanupStaleLoginAttempts() {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  await db.delete(loginAttempts).where(lt(loginAttempts.updatedAt, cutoff));
 }
 
 export async function createBetaFeedback(data: { userId: number; category: "bug" | "idee" | "facilite" | "autre"; rating: number; message: string }) {

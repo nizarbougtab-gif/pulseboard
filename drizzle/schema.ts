@@ -88,6 +88,15 @@ export const securityEvents = pgTable("security_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+// HMAC'd email keys keep lockout state durable without storing another copy of an email address.
+export const loginAttempts = pgTable("login_attempts", {
+  emailHash: text("email_hash").primaryKey(),
+  attempts: integer("attempts").default(0).notNull(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).defaultNow().notNull(),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const betaFeedback = pgTable("beta_feedback", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),

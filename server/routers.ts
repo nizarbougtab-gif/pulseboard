@@ -11,7 +11,7 @@ import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { canAutoJoinService, canDo, canJoinImmediatelyWithInvitation, canReviewMedicalRole, medicalRoleReviewApproved, type Permission } from "../shared/permissions";
 import { isPatientGivenNamePrefix, isPatientInitial, patientInitials, sanitizePatientInitial } from "../shared/patientIdentity";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const FORBIDDEN_MESSAGE = "Vous n'avez pas accès à cette ressource";
@@ -43,6 +43,23 @@ function normalizePatientName(value: string) {
   const name = value.trim().replace(/\s+/g, " ");
   if (!name || name.length > 100) throw new TRPCError({ code: "BAD_REQUEST", message: "Un nom valide est obligatoire" });
   return name;
+}
+
+function loginAttemptEmailHash(email: string) {
+  const secret = ENV.cookieSecret && ENV.cookieSecret.length >= 32 ? ENV.cookieSecret : "pulseboard-local-login-attempts";
+  return createHmac("sha256", secret).update(email.trim().toLowerCase()).digest("hex");
+}
+
+async function failLogin(emailHash: string, userId: number | null, detail: string) {
+  await db.logSecurityEvent(userId, "login_failed", detail);
+  const record = await db.recordFailedLoginAttempt(emailHash);
+  if (record?.lockedUntil && record.lockedUntil.getTime() > Date.now()) {
+    void db.logSecurityEvent(userId, "auth_account_rate_limited").catch(error => {
+      console.warn("[PulseBoard] Événement de verrouillage non journalisé:", (error as Error).message);
+    });
+    throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Réessayez dans 15 minutes." });
+  }
+  throw new TRPCError({ code: "UNAUTHORIZED", message: "Email ou mot de passe incorrect" });
 }
 
 function redactPatientForMembership<T extends Record<string, any>>(patient: T, membership: { role: string | null; provisional: boolean }) {
@@ -266,16 +283,22 @@ export const appRouter = router({
       email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
       password: z.string().min(1).max(128),
     })).mutation(async ({ ctx, input }) => {
-      const user = await db.getUserByEmail(input.email);
-      if (!user || !user.passwordHash) {
-        await db.logSecurityEvent(null, "login_failed", "Compte introuvable");
-        throw new Error("Email ou mot de passe incorrect");
+      const emailHash = loginAttemptEmailHash(input.email);
+      const loginLock = await db.getLoginAttemptLock(emailHash);
+      if (loginLock?.lockedUntil && loginLock.lockedUntil.getTime() > Date.now()) {
+        void db.logSecurityEvent(null, "auth_account_rate_limited").catch(error => {
+          console.warn("[PulseBoard] Événement de verrouillage non journalisé:", (error as Error).message);
+        });
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Trop de tentatives. Réessayez dans 15 minutes." });
       }
+      const user = await db.getUserByEmail(input.email);
+      if (!user) return failLogin(emailHash, null, "Compte introuvable");
+      if (!user.passwordHash) return failLogin(emailHash, null, "Compte introuvable");
       const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) {
-        await db.logSecurityEvent(user.id, "login_failed", "Mot de passe incorrect");
-        throw new Error("Email ou mot de passe incorrect");
+        await failLogin(emailHash, user.id, "Mot de passe incorrect");
       }
+      await db.resetLoginAttempts(emailHash);
       if (ENV.emailVerificationEnforced && !user.emailVerified) {
         await db.logSecurityEvent(user.id, "login_blocked_unverified_email");
         throw new TRPCError({ code: "FORBIDDEN", message: "Confirmez votre adresse e-mail avant de vous connecter." });

@@ -8,8 +8,9 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { seedHospitalsIfEmpty, runMigrations, ensureConfiguredAdmins, logSecurityEvent } from "../db";
+import { seedHospitalsIfEmpty, runMigrations, ensureConfiguredAdmins, cleanupStaleLoginAttempts } from "../db";
 import { ENV } from "./env";
+import { authLimiter } from "./rateLimit";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -49,6 +50,11 @@ async function startServer() {
     if (ENV.adminEmails.length === 0) throw new Error("PULSEBOARD_ADMIN_EMAILS est requis lorsque BILLING_ENFORCED=true");
   }
   await runMigrations();
+  void cleanupStaleLoginAttempts().catch(error => console.warn("[PulseBoard] Nettoyage des tentatives de connexion impossible:", (error as Error).message));
+  const loginAttemptCleanup = setInterval(() => {
+    void cleanupStaleLoginAttempts().catch(error => console.warn("[PulseBoard] Nettoyage des tentatives de connexion impossible:", (error as Error).message));
+  }, 24 * 60 * 60_000);
+  loginAttemptCleanup.unref();
   // Seed hôpitaux sénégalais si la table est vide
   await seedHospitalsIfEmpty();
   await ensureConfiguredAdmins(ENV.adminEmails);
@@ -72,35 +78,7 @@ async function startServer() {
     next();
   });
 
-  const loginAttempts = new Map<string, { count: number; resetAt: number; blockedEventLogged?: boolean }>();
-  const rateLimitCleanup = setInterval(() => {
-    const now = Date.now();
-    for (const [key, attempt] of loginAttempts) {
-      if (attempt.resetAt <= now) loginAttempts.delete(key);
-    }
-  }, 15 * 60_000);
-  rateLimitCleanup.unref();
-  app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword", "/api/trpc/auth.resendVerification"], (req, res, next) => {
-    const now = Date.now();
-    const key = req.ip || req.socket.remoteAddress || "unknown";
-    const current = loginAttempts.get(key);
-    if (!current || current.resetAt <= now) {
-      loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60_000 });
-      return next();
-    }
-    if (current.count >= 10) {
-      res.setHeader("Retry-After", String(Math.ceil((current.resetAt - now) / 1000)));
-      if (!current.blockedEventLogged) {
-        current.blockedEventLogged = true;
-        void logSecurityEvent(null, "auth_rate_limited").catch(error => {
-          console.warn("[PulseBoard] Événement de limitation non journalisé:", (error as Error).message);
-        });
-      }
-      return res.status(429).json({ error: "Trop de tentatives. Réessayez dans quelques minutes." });
-    }
-    current.count += 1;
-    next();
-  });
+  app.use(["/api/trpc/auth.login", "/api/trpc/auth.register", "/api/trpc/auth.forgotPassword", "/api/trpc/auth.resetPassword", "/api/trpc/auth.resendVerification"], authLimiter);
 
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ limit: "10mb", extended: true }));
